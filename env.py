@@ -234,13 +234,12 @@ def build_tentacle(n_suckers,box, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,carrierFraction = 1,is_multiagent = True): 
-        wavelengthFraction = carrierFraction
+    def __init__(self,n_suckers,sim_shape,t_position,carrierMode = 1,is_multiagent = True): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
-        self.carrierFraction = carrierFraction
-        print("Carrier modes= ",carrierFraction)
+        self.carrierMode = carrierMode
+        print("Carrier modes= ",carrierMode)
         box = Box(sim_shape)
         self._box = box
         self.isMultiagent = is_multiagent
@@ -320,7 +319,7 @@ class   Environment(object):
     
     def l0(self,t:float,k:int,N) -> float:
         # the k dependent term mimics some time delay in the propagation 
-        wavelengthFraction = self.carrierFraction
+        wavelengthFraction = self.carrierMode
         # print (wavelengthFraction)
         return x0 + amplitude*math.sin(omega*t - 2*math.pi*wavelengthFraction/N * k)
     
@@ -490,7 +489,12 @@ class   Environment(object):
         #any agent touches
         # if np.any(touching):
         #only the tip touches
-        
+
+        #phase_velocity = omega*2*math.pi*self.carrierFraction/(self._n_agents)
+        #velocity = 0.5/dt*(self._CM_position[-1] - self._CM_position[-2])#need several orders to be distinguishible from advancement
+        # velocity2 = 1./6(self._CM_position[-1] + self._CM_position[-2] -self._CM_position[-3] - self._CM_position[-4])
+        # velocityn = sum(self._CM_position[-int(len(self._CM_position)/2):]) - sum(self._CM_position[:int(len(self._CM_position)/2)])
+        # print(velocityn)
         if touching[-1]:
             print(touching)
             reward =1
@@ -499,10 +503,12 @@ class   Environment(object):
             advancing = self._CM_position[-1]>self._CM_position[-2]
         except IndexError:
             advancing = False
-        if advancing:
+        # print(advancing)
+        #if v<0.1*phase_velocity
+        if advancing>0:
             reward = 1
         else:
-            reward = -1
+            reward = -2
         
         self._tip_positions.append(self.get_tip())
         self._CM_position.append(self.get_CM())

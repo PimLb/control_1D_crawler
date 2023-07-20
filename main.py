@@ -8,8 +8,8 @@ t_position = 29.5
 carrierFraction = 1
 
 
-episodes =2000
-steps = 300
+episodes =1000
+steps = 400
 
 env = Environment(n_suckers,sim_shape,t_position,carrierFraction=carrierFraction)
 Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,n_episodes=episodes)

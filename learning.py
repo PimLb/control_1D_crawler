@@ -2,7 +2,7 @@ import numpy as np
 
 lr = 0.1#learning rate
 gamma = 0.9#discount
-epsilon = 0.5
+epsilon = 0.9
 min_epsilon =0.
 
 
@@ -17,6 +17,7 @@ class actionValue(object):
         self._action_space = learning_space[1]
         self._nAgents = nAgents
         self.epsilon = epsilon
+        self.discount = gamma
         self._upgrade_e = (epsilon-min_epsilon)/n_episodes
         if collapse:
             self._parallelUpdate = True
@@ -44,7 +45,7 @@ class actionValue(object):
 
         
     def reset(self):
-        Q = np.zeros(self.dim)
+        self._Q = np.zeros(self.dim)
         self.epsilon = epsilon
     
     def _get_index(self,state,action=0):
