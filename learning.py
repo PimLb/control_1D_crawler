@@ -8,6 +8,11 @@ min_epsilon =0.
 
 def interpret_binary(s:tuple):
     return int("".join(str(ele) for ele in s), 2)
+
+def interpret_thernary(s:tuple):
+    return int("".join(str(ele) for ele in s), 3)
+
+
 def make_binary(index:int):
     return [int(i) for i in bin(index)[2:]]
 
@@ -52,12 +57,15 @@ class actionValue(object):
         if self._multiAgent:
             #here action is a scalar and state a 2 elements list. 
             # I need to consider dummy action argument, when I need only state
-            i = interpret_binary(state)
+            #i = interpret_binary(state)
+            i = interpret_thernary(state)
             j = action
         else:
             #to check..
-            i = interpret_binary(state)
+            # i = interpret_binary(state)
+            i = interpret_thernary(state)
             j = interpret_binary(action)
+            
         return i,j
     def _update_Q(self,newstate,oldstate,action,reward):
         '''
@@ -69,7 +77,8 @@ class actionValue(object):
 
         #update each agent Q
         if self._parallelUpdate:
-            for  k in range(self._nAgents):
+            #SKIPPING BASE AND TIP..
+            for  k in range(0,self._nAgents):
                 s_new,_a_new = self._get_index(newstate[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
                 s_old,a_old = self._get_index(oldstate[k],action[k])
                 self._Q[s_old,a_old] += lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old,a_old])
@@ -104,6 +113,10 @@ class actionValue(object):
                 #Fetching action for each agent looping through each agent state
                 for k in range(self._nAgents):
                     # print(s[k])
+                    #SKIPPING THOSE
+                    # if(k==0 or k==self._nAgents-1):
+                    #     new_action.append(0)
+                    #     continue
                     sind,_a = self._get_index(s[k])
                     # print(s[k],sind)
                     if np.random.random() < (1 - self.epsilon):
@@ -121,6 +134,7 @@ class actionValue(object):
                         new_action.append(np.random.randint(0,  self._action_space))
             return new_action
         else:
+            #CHECK
             if np.random.random() < (1 - self.epsilon):
                 sind,_a = self._get_index(s)
                 new_action=np.argmax(self._Q[sind])

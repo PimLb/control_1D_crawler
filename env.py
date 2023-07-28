@@ -9,14 +9,27 @@ import matplotlib.pyplot as plt
 #some optimization..
 from numba import jit
 
+#IMPORTANT TO DO:
+# Plot action pulse against carrier to check if peak of pulse corresponds to peak of l0 (optimal friction).
+#Keep in mind we are discrete..
+#Could be nice to reduce omega accordingly whem more agents to impose fixed phase velocity.
+# We could show higher the number of agents, higher velocity because we approah the continuum limit?
 
 
+#OBSERVATION and HOT QUESTIOMS:
+#1. In a multiagent setting and with a simple Q matrix linked to elongation/compression states there's no way of maximizing the velocity 
+#  Could this be different in single agent? (if reward adequate to drive velocity maximization)
+# Indeed: 1. No analytical rule about both springs in elongation
+#2. Can I distinguish crawling to grabbing by tuning reward on wall(prey) reach in a training scenario with prey close enough?
 
 
 # QUESTIONS:
 # In dynamics shall I pick an agent at random to evolve, or perform each time all actions for each sucker?
 # In a genuine multi agent what would be the choice? 
+# So fae sequential update from base to tip
 # In a single agent framework I whoud choose an action at once which corresponds to do something on a single sucker..
+
+
 
 red = (220, 20, 60)
 blue = (30, 144, 255)
@@ -27,7 +40,7 @@ violet = (219,112,147)
 
 dt = 0.1
 minDistance = 0.5
-omega = 1
+
 x0=2
 amplitude = 0.8
 
@@ -177,28 +190,31 @@ class Agent(object):
         self._position = self._box.periodicB(np.array(coordinate))
             
 
-
-def build_tentacle(n_suckers,box, exploringStarts = False):
+def build_tentacle(n_suckers,box,l0, exploringStarts = False):
     '''
     build tentacle with some randomicity
     '''
     # Info on space from box objec
     A = []
-    offset_x = box.boundary[0]/n_suckers
+    offset_x = 10#box.boundary[0]/n_suckers
+    # print("offset= ",offset_x, box.boundary[0]-offset_x)
     #fare in modo di avere None dove indice non esiste
     # old_position = offset_x
+    old_position = box.boundary[0]-offset_x
     if exploringStarts:
         random.seed()#uses by default system time
         if box.dimensions == 1:
             for k in range(n_suckers):
-                position = offset_x + k * x0 + amplitude * random.random()
+                # position = offset_x + k * x0 + amplitude * random.random()
+                position = old_position - l0(0,n_suckers-1-k) + 0.5*amplitude * random.random()
                 #position = old_position + rest_position + amplitude * random.random()
-                # old_position = position
+                old_position = position
                 A.append(Agent(box,[position]))
+            A = A[::-1]
         elif box.dimensions == 2:
             offset_y = box.boundary[1]/2
             for k in range(n_suckers):
-                position_x = offset_x + k * x0 + amplitude * random.random()
+                position_x = offset_x + k * x0 + 0.5*amplitude * random.random()
                 #position_x = old_position + rest_position + amplitude * random.random()
                 #old_position = position_x
                 position_y = offset_y #+ k + dt * random.random()
@@ -208,10 +224,14 @@ def build_tentacle(n_suckers,box, exploringStarts = False):
     else:
         if box.dimensions == 1:
             for k in range(n_suckers):
-                position = offset_x + k * x0
+                # position = offset_x + k * x0
+                position = old_position - l0(0,n_suckers-1-k)
+                # print(position)
+                old_position = position
                 #position =  old_position - rest_position
                 #old_position = position
                 A.append(Agent(box,[position]))
+            A = A[::-1]
         elif box.dimensions == 2:
             offset_y = box.boundary[1]/2
             # print("offset y",offset_y)
@@ -234,11 +254,13 @@ def build_tentacle(n_suckers,box, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,carrierMode = 1,is_multiagent = True): 
+    def __init__(self,n_suckers,sim_shape,t_position,carrierMode = 1,omega=1,is_multiagent = True): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
+        self.omega = omega 
         self.carrierMode = carrierMode
+        self._nsuckers=n_suckers
         print("Carrier modes= ",carrierMode)
         box = Box(sim_shape)
         self._box = box
@@ -253,9 +275,9 @@ class   Environment(object):
         # if np.any([self._tposition[k]>=b for k,b in enumerate(self._box.boundary.values())]):
         if np.any([self._tposition>=self._box.boundary]):
             raise ValueError("Target out of simulation box!")
-        self._agents.extend(build_tentacle(n_suckers,box)) #doing so self.universe mirrors the content
+        self._agents.extend(build_tentacle(n_suckers,box,self.l0)) #doing so self.universe mirrors the content
 
-        self._nsuckers=n_suckers
+        
 
         if is_multiagent:
             self._nagents = n_suckers
@@ -288,12 +310,12 @@ class   Environment(object):
 
         if is_multiagent == True:
             self.action_space = 2 # sucker can turn on friction or turn it off
-            self.state_space = 4
+            self.state_space = 8#4
         else:
             self.action_space = np.power(2,n_suckers)
-            self.state_space = np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
+            self.state_space = np.power(8,n_suckers)# np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
     
-    def reset(self,exploringStarts = True,fps = FPS):
+    def reset(self,exploringStarts = False,fps = FPS):
         self._t = 0 #current time
         self._nsteps = 0
         self._telapsed =[]
@@ -303,7 +325,7 @@ class   Environment(object):
         self._agents = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
-        self._agents.extend(build_tentacle(self._nagents,self._box,exploringStarts=exploringStarts))
+        self._agents.extend(build_tentacle(self._nagents,self._box,self.l0,exploringStarts=exploringStarts))
         self._tip_positions = []
         self._CM_position = []
         self._figTip = None
@@ -317,11 +339,15 @@ class   Environment(object):
             a.lastAction = 0
     
     
-    def l0(self,t:float,k:int,N) -> float:
+    def l0(self,t:float,k:int) -> float:
+        '''
+        N = number of suckers
+        '''
         # the k dependent term mimics some time delay in the propagation 
         wavelengthFraction = self.carrierMode
+        N = self._nsuckers
         # print (wavelengthFraction)
-        return x0 + amplitude*math.sin(omega*t - 2*math.pi*wavelengthFraction/N * k)
+        return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * k)
     
 
     def debugState(self):
@@ -329,8 +355,8 @@ class   Environment(object):
         for k in range(1,self._nagents-1):
             dright = self._agents[k].position-self._agents[k].rightNeighbor.position
             dleft = self._agents[k].position-self._agents[k].leftNeighbor.position
-            left_tension = (dleft-self.l0(self._t,k-1,self._nagents))
-            right_tension = (self._agents[k].position - self._agents[k].rightNeighbor.position+self.l0(self._t,k,self._nagents))
+            left_tension = (dleft-self.l0(self._t,k-1))
+            right_tension = (self._agents[k].position - self._agents[k].rightNeighbor.position+self.l0(self._t,k))
             reducedStates.append((left_tension,right_tension))
         return reducedStates
     
@@ -341,71 +367,81 @@ class   Environment(object):
     
     def get_state(self):
         '''
-            2 states per agent depending on tension state of neighboring springs
+            3 states per agent depending on tension state of neighboring springs:
+                states: 0(-1) =  compressed; 1 = elongated, 2 = none
+            4 out of eigth can be realized only by tip and base for the definitions given.
         '''
          #returns the state of the sistem and can be framed single agent or multiagent
         multiagent = self.isMultiagent
 
+        #EFFICIENCY CONSIDERATIONS:
+        # Since the tentacle is an ordered list there's no need to store pointer to neighbor TODO
+        # Many ifs can be avoided by treating explicitly base and tip OK
         
+
+        #NEW:
+        # 3 STATES per sucker 2^3 states
+        #states: 0(-1) =  compressed; 1 = elongated, 2 = none
+        #thernary index code: e.g.(2,0)=6, (2,1)=7, (1,0)=3, (1,1) = 4
+        # indexes populated by tip: (0,2) = 2, (1,2) = 5 (expect here action?)
+        # indexes populated by base: (2,0) = 6 (expect here action?), (2,1) = 7
+        # indexes populated by intermediate suckers: (0,0) = 0, (0,1) = 1,(1,0)=3 (expect here action),(1,1)=4
+
+
+        #BASE
+        states = []
+        dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
+        right_tension = sign0(dright-self.l0(self._t,0))
+        states.append((2,right_tension))
+
+        #Intermediate suckers
+        for k in range(1,self._nagents-1):
+            dright = -self._agents[k].position +self._agents[k].rightNeighbor.position
+            right_tension = sign0(dright-self.l0(self._t,k))  #negative argument = pushing left (compressed)
+            dleft = self._agents[k].position - self._agents[k].leftNeighbor.position
+            left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
+            states.append((left_tension,right_tension))
+
+        #TIP
+        dleft = self._agents[self._nagents-1].position - self._agents[self._nagents-1].leftNeighbor.position
+        left_tension = sign0(dleft-self.l0(self._t,self._nagents-1))
+        states.append((left_tension,2))
 
 
         # states = []
-        # for k in range(1,self._nagents-1):
-            
-        #     dright = self._agents[k].position-self._agents[k].rightNeighbor.position #should always be negative
+        # for k in range(self._nagents):
+        #     if self._agents[k].leftNeighbor is None:
+        #         #BASE
+        #         dright = -self._agents[k].position +self._agents[k].rightNeighbor.position #should always be positive
         #         # print(dright)
-        #     if dright>0:
+        #         if dright<0:
         #             # print('here')
-        #         dright = dright -  self._box.boundary
+        #             dright = dright +  self._box.boundary
         #             # print(dright)
-        #         #right_tension = sign(-self._agents[k].position + self._agents[k].rightNeighbor.position-l0(self._t,k,self._nagents))
-        #         #to uniform the concept of compression and elongation
-        #     right_tension = sign0(dright+l0(self._t,k,self._nagents))
-        #     dleft = self._agents[k].position-self._agents[k].leftNeighbor.position #should always be positive
-        #     if dleft<0:
-        #         dleft = dleft + self._box.boundary
-        #     left_tension = sign0(dleft-l0(self._t,k-1,self._nagents))
- 
+        #         right_tension = sign0(dright-self.l0(self._t,k,self._nagents))#positive argument positve force (elongated)
+
+        #         left_tension = right_tension #not sure SEE WITH AGNESE
+
+
+        #         states.append((left_tension,right_tension))
+
+        #         continue
+        #     else:
+        #         dleft = self._agents[k].position - self._agents[k].leftNeighbor.position #should always be positive
+        #         if dleft<0:
+        #             dleft = dleft + self._box.boundary
+        #         left_tension = sign0(dleft-self.l0(self._t,k-1,self._nagents))#positive argument negative force (elongated)
+        #     if self._agents[k].rightNeighbor is None:
+        #         # TIP
+        #         right_tension = left_tension #not sure SEE WITH AGNESE
+        #     else:
+        #         # right_tension = sign(-self._agents[k].position + self._agents[k].rightNeighbor.position-self.l0(self._t,k,self._nagents))
+                
+        #         dright = -self._agents[k].position + self._agents[k].rightNeighbor.position
+        #         right_tension = sign0(dright-self.l0(self._t,k,self._nagents))
         #     states.append((left_tension,right_tension))
 
 
-
-
-
-        states = []
-        for k in range(self._nagents):
-            if self._agents[k].leftNeighbor is None:
-                #BASE
-                dright = self._agents[k].position - self._agents[k].rightNeighbor.position #should always be negative
-                # print(dright)
-                if dright>0:
-                    # print('here')
-                    dright = dright -  self._box.boundary
-                    # print(dright)
-                #right_tension = sign(-self._agents[k].position + self._agents[k].rightNeighbor.position-self.l0(self._t,k,self._nagents))
-                #to uniform the concept of compression and elongation
-                right_tension = sign0(dright+self.l0(self._t,k,self._nagents))
-
-                left_tension = 1-right_tension #not sure SEE WITH AGNESE
-
-
-                states.append((left_tension,right_tension))
-
-                continue
-            else:
-                dleft = self._agents[k].position - self._agents[k].leftNeighbor.position #should always be positive
-                if dleft<0:
-                    dleft = dleft + self._box.boundary
-                left_tension = sign0(dleft-self.l0(self._t,k-1,self._nagents))
-            if self._agents[k].rightNeighbor is None:
-                # TIP
-                right_tension = 1-left_tension #not sure SEE WITH AGNESE
-            else:
-                # right_tension = sign(-self._agents[k].position + self._agents[k].rightNeighbor.position-self.l0(self._t,k,self._nagents))
-                #to uniform the concept of compression and elongation
-                dright = self._agents[k].position - self._agents[k].rightNeighbor.position
-                right_tension = sign0(dright+self.l0(self._t,k,self._nagents))
-            states.append((left_tension,right_tension))
         if multiagent:
             # if not humanR:
             return states
@@ -425,12 +461,16 @@ class   Environment(object):
         
     def get_humandR_state(self):
         state = self.get_state()
-        return [ ( "elongated" if s[0]==1 else "compressed" , "elongated" if s[1] ==1 else "compressed") for s in state]
+        return [ ( "elongated" if s[0]==1 else "compressed" if s[0]==0 else "base" , "elongated" if s[1] ==1 else "compressed" if s[1]==0 else "tip") for s in state]
                 
     def get_tip(self):
         return self._agents[-1].position[0]
     def get_CM(self):
+        ''' 2 choices: average of sucker positions or the middle of the tentacle
+           Better the first to account for compressive motions in the right direction
+        '''
         return np.average([a.position for a in self._agents])
+        #return 0.5*(self._agents[0].position+self._agents[-1].position)
     def get_observation(self):
         '''returns a human readable observation (position of each sucker)'''
         CM = self.get_CM()
@@ -466,9 +506,9 @@ class   Environment(object):
                 # self._agents[k]._position = self._agents[k]._position_old #useless to check boundary conditions
             elif action[k] == 0:
                 if self._agents[k].leftNeighbor is None:
-                    self._agents[k].position = self._agents[k].rightNeighbor._position - self.l0(self._t,k,self._nagents)
+                    self._agents[k].position = self._agents[k].rightNeighbor._position - self.l0(self._t,k)
                 elif self._agents[k].rightNeighbor is None:
-                    self._agents[k].position = self._agents[k].leftNeighbor._position +self.l0(self._t,k-1,self._nagents)
+                    self._agents[k].position = self._agents[k].leftNeighbor._position +self.l0(self._t,k-1)
                 else:
                     pleft = self._agents[k].leftNeighbor._position
                     pright = self._agents[k].rightNeighbor._position
@@ -477,11 +517,11 @@ class   Environment(object):
                         pright = pright + self._box.boundary
                     
                     #update on position automatically embeds boundary conditions
-                    self._agents[k].position = 0.5*(pright + pleft + self.l0(self._t,k-1,self._nagents) - self.l0(self._t,k,self._nagents)) 
+                    self._agents[k].position = 0.5*(pright + pleft + self.l0(self._t,k-1) - self.l0(self._t,k)) 
                  
         for k in range(self._nsuckers):
             self._agents[k].lastAction = action[k]
-            # self._agents[k]._position_old = self._agents[k]._position #set old positions to new position
+            self._agents[k]._position_old = self._agents[k]._position #set old positions to new position
 
         terminal = False 
 
@@ -495,28 +535,34 @@ class   Environment(object):
         # velocity2 = 1./6(self._CM_position[-1] + self._CM_position[-2] -self._CM_position[-3] - self._CM_position[-4])
         # velocityn = sum(self._CM_position[-int(len(self._CM_position)/2):]) - sum(self._CM_position[:int(len(self._CM_position)/2)])
         # print(velocityn)
-        if touching[-1]:
-            print(touching)
-            reward =1
-            terminal = True
+
+        #CAREFUL THIS IS OK ONLY IN 1D (advancing concept)
+
+        
         try:
-            advancing = self._CM_position[-1]>self._CM_position[-2]
+            advancing = self._CM_position[-1]-self._CM_position[-2]
         except IndexError:
-            advancing = False
+            advancing = 0
+        # advancingBaseTip = (self._agents[0].position-self._agents[0].position_old>0) or (self._agents[-1].position-self._agents[-1].position_old>0)
         # print(advancing)
         #if v<0.1*phase_velocity
         if advancing>0:
-            reward = 1
+            reward = advancing
         else:
-            reward = -2
-        
+            reward = -1
+        if touching[-1]:
+            print(touching)
+            terminal = True
+            reward = 2 #to enforce higher speed.. Crawling vs grabbing..
+            #Could it be  different in single and muilti agent?
+    
         self._tip_positions.append(self.get_tip())
         self._CM_position.append(self.get_CM())
 
         newState = self.get_state()
         # self._newState = self.get_state()
         # self._current_reward = reward
-        self.cumulatedReward += reward
+        self.cumulatedReward += reward #cumulated reward in the episode
         
 
         return  newState,reward,terminal 
@@ -570,6 +616,7 @@ class   Environment(object):
 
 
     def get_policyView(self):
+        #TODO
         '''This function represents the spatial behavior of the policy across the tentacle
             That is actions position instateonously
         '''
@@ -673,14 +720,14 @@ class   Environment(object):
                     # )
                     #draw l0 position
                     
-                    l = np.array([a[0]+self.l0(self._t,n-1,self._nagents),yrepr-1])*self.pix_square_size
+                    l = np.array([a[0]+self.l0(self._t,n-1),yrepr-1])*self.pix_square_size
                     
                     a = a*self.pix_square_size
                     pygame.draw.circle(
                         canvas,
                         color,
                         a,
-                        self.pix_square_size/3,
+                        self.pix_square_size/2,
                         draw_bottom_right=True,draw_bottom_left = True
                     )
                     if agent.rightNeighbor is not None:
@@ -694,13 +741,13 @@ class   Environment(object):
                                 canvas,
                                 red,
                                 l,
-                                self.pix_square_size/5,
+                                self.pix_square_size/3,
                             )
                     
                             right = np.array([agent.rightNeighbor.position[0],yrepr])* self.pix_square_size
                             lenght = math.ceil((right - a)[0])
                             # pygame.draw.line(canvas,0,a,right)
-                            size = self.pix_square_size/4 *(1-n/nagents) + self.pix_square_size/5
+                            size = self.pix_square_size/2 *(1-n/nagents) + self.pix_square_size/5
                             pygame.draw.rect(
                                 canvas,
                                 dark_violet,
