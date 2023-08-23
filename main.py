@@ -2,16 +2,18 @@ from env import Environment
 from learning import actionValue
 import numpy as np
 
+
+carrierMode = 1
 n_suckers = 8
 sim_shape = (30,)
 t_position = 29.5
-carrierFraction = 1
+
 
 
 episodes =1000
-steps = 400
+steps = 500
 
-env = Environment(n_suckers,sim_shape,t_position,carrierFraction=carrierFraction)
+env = Environment(n_suckers,sim_shape,t_position,carrierMode=carrierMode)
 Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,n_episodes=episodes)
 #OBS: action array is identically formulated for both multiagent and single. What changes is the indexing strategy
 tstepsTotarget =[]

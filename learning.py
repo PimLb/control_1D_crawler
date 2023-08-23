@@ -1,7 +1,7 @@
 import numpy as np
 
 lr = 0.1#learning rate
-gamma = 0.9#discount
+gamma = 0.9#discount 0.9 to reflect upon..
 epsilon = 0.9
 min_epsilon =0.
 
@@ -77,7 +77,6 @@ class actionValue(object):
 
         #update each agent Q
         if self._parallelUpdate:
-            #SKIPPING BASE AND TIP..
             for  k in range(0,self._nAgents):
                 s_new,_a_new = self._get_index(newstate[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
                 s_old,a_old = self._get_index(oldstate[k],action[k])
