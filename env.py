@@ -36,8 +36,8 @@ from numba import jit
 
 elastic_constant = 100 #does not matter for overdamped..
 mass = 1
-reduced_k = elastic_constant/mass
-dt = 0.1
+reduced_k = elastic_constant/mass #overdsmped limit if k>>m but dt must be 
+dt = 0.05
 
 #------------
 
@@ -51,7 +51,7 @@ violet = (219,112,147)
 
 minDistance = 0.5
 
-x0=2
+x0=2.5
 amplitude = 0.5
 
 
@@ -287,6 +287,7 @@ class   Environment(object):
         self._box = box
         
         self._t= 0
+        self.deltaT = dt
         self._nsteps = 0
         self._episode = 1
         self._universe = {"agents":[],"target":[]}
@@ -380,30 +381,34 @@ class   Environment(object):
         return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * k)
     
     def _get_velocity(self,sucker,current_a):
-        return sucker._velocity_old + 0.5*dt*(current_a-sucker._acceleration_old)
+        return sucker._velocity_old + 0.5*dt*(current_a+sucker._acceleration_old)
 
 
     def _get_acceleration(self,sucker):
+        #.position is the current position
+
         k = sucker._id
         try:
-            pleft = sucker.leftNeighbor._position
-            dleft = sucker.position - pleft
+            pleft = sucker.leftNeighbor._position_old
+            dleft = sucker._position_old - pleft
             if dleft<0:
                 dleft += self._box.boundary
             left_tension = dleft-self.l0(self._t,k-1) #negative argument = pushing right (compressed)
         except:
             #BASE
+            # print("base")
             left_tension =0
         try:
-            pright = sucker.rightNeighbor._position
-            dright = pright - sucker.position
+            pright = sucker.rightNeighbor._position_old
+            dright = pright - sucker._position_old
             if dright<0:
                 dright +=  self._box.boundary
             right_tension = dright-self.l0(self._t,k)  #negative argument = pushing left (compressed)
         except:
             #TIP
+            # print("tip")
             right_tension = 0
-        
+        # print(left_tension,right_tension)
         return reduced_k*(right_tension - left_tension)
     
     def get_state(self):
@@ -439,6 +444,9 @@ class   Environment(object):
         right_tension = sign0(dright-self.l0(self._t,0))
         states.append((2,right_tension))
 
+        #update old posiiton
+        self._agents[0]._position_old = self._agents[0].position
+
         #Intermediate suckers
         # for k in range(1,self._nsuckers-1):
         for sucker in self._agents[1:self._nsuckers-1]:
@@ -456,10 +464,16 @@ class   Environment(object):
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
             states.append((left_tension,right_tension))
 
+            #update old posiitons
+            sucker._position_old = sucker.position
+
         #TIP
         dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
         left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1-1))
         states.append((left_tension,2))
+
+        #update old posiiton
+        self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position
 
 
         # states = []
@@ -572,12 +586,16 @@ class   Environment(object):
                     #self._agents[k].position = self._agents[k]._position_old
                 else:
                     acceleration = self._get_acceleration(sucker)
-                    velocity = self._get_velocity(sucker,acceleration) #acceleration at current position
+                    # print("a= ", acceleration)
+                    velocity = self._get_velocity(sucker,acceleration) 
+                    # print("v= ",velocity)
+                    # print(sucker.position,sucker._position_old)
                     sucker.position =  sucker._position_old +  dt*velocity +0.5*dt*dt* acceleration
                     sucker.acceleration_old = acceleration
                     sucker._velocity_old = velocity
-                    sucker._position_old = sucker._position
-
+                    # sucker._position_old = sucker.position #CANNOT BE IN THIS LOOP SINCE NEIGHBORS NEED OLD POSITION
+                    #could try somenthing like this..
+                    #sucker.leftNeighbor.leftNeighbor._position_old = sucker.leftNeighbor.leftNeighbor._position
         else:
             #BASE
             if action[0] == 0:
@@ -619,22 +637,22 @@ class   Environment(object):
 
 
         #CM BASED
-        # try:
-        #     advancing = self._CM_position[-1]-self._CM_position[-2]
-        # except IndexError:
-        #     advancing = 0
-
-        #TIP BASED
         try:
-            advancing = self._tip_positions[-1]-self._tip_positions[-2]
+            advancing = self._CM_position[-1]-self._CM_position[-2]
         except IndexError:
             advancing = 0
+
+        #TIP BASED
+        # try:
+        #     advancing = self._tip_positions[-1]-self._tip_positions[-2]
+        # except IndexError:
+        #     advancing = 0
         
        
         if advancing>0:
             reward = advancing
         else:
-            reward = -1
+            reward = -2
         if touching[-1]:
             print(touching)
             terminal = True
@@ -644,7 +662,7 @@ class   Environment(object):
         self._tip_positions.append(self.get_tip())
         self._CM_position.append(self.get_CM())
 
-        newState = self.get_state()
+        newState = self.get_state()#also updates old positions
 
         self.cumulatedReward += reward #cumulated reward in the episode
         
