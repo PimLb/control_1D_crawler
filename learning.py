@@ -145,7 +145,27 @@ class actionValue(object):
     def makeGreedy(self):
         self.epsilon -= self._upgrade_e
         return self.epsilon
+    
+    def get_onPolicy_action(self,s):
+        if self._multiAgent:
+            new_action = []
+            if self._parallelUpdate:
+                for k in range(self._nAgents):
+                    sind,_a = self._get_index(s[k])
+                    # print(s[k],sind)
+                    new_action.append(np.argmax(self._Q[sind]))
+            else:
+                #one Q function for each agent
+                for k in range(self._nAgents):
+                    sind,_a = self._get_index(s[k])
+                    new_action.append(np.argmax(self._Q[k][sind]))
+            return new_action
+        else:
+            #CHECK
+            new_action=np.argmax(self._Q[sind])
         
+
+            return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
     
     
     def get_value(self):
