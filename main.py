@@ -3,6 +3,8 @@ from learning import actionValue
 import numpy as np
 
 
+#TO DO: Equilibrate a bit the system before training..
+
 carrierMode = 1
 n_suckers = 8
 sim_shape = (30,)
@@ -18,7 +20,8 @@ Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,n_episode
 #OBS: action array is identically formulated for both multiagent and single. What changes is the indexing strategy
 tstepsTotarget =[]
 episode = []
-
+diff =[] #to check convergence
+Q_old = Q._Q.copy()
 for e in range(episodes):
     state = env.get_state()
     for k in range(steps):
@@ -35,6 +38,8 @@ for e in range(episodes):
     if (e%200==0):
         print(e)
         print(Q.get_value())
+    diff.append(np.amax(np.abs(Q._Q -Q_old)))
+    Q_old = Q._Q.copy()
     Q.makeGreedy()
     tstepsTotarget.append(k)
     episode.append(env._episode)
