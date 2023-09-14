@@ -1,8 +1,9 @@
 import numpy as np
 
-lr = 0.1#learning rate
+lr = 0.05#learning rate
+min_lr = 0.01
 gamma = 0.9#discount 0.9 to reflect upon..
-epsilon = 0.9
+epsilon = 0.6
 min_epsilon =0.
 
 
@@ -22,8 +23,10 @@ class actionValue(object):
         self._action_space = learning_space[1]
         self._nAgents = nAgents
         self.epsilon = epsilon
+        self.lr = lr
         self.discount = gamma
         self._upgrade_e = (epsilon-min_epsilon)/n_episodes
+        self._upgrade_lr = (lr-min_lr)/n_episodes
         if collapse:
             self._parallelUpdate = True
             self.dim = learning_space
@@ -39,7 +42,7 @@ class actionValue(object):
         
 
 
-        Q = np.zeros(learning_space)
+        Q = np.random.random(learning_space)#np.zeros(learning_space)
         
         if not collapse and self._multiAgent:
             self._Q = []
@@ -80,12 +83,12 @@ class actionValue(object):
             for  k in range(0,self._nAgents):
                 s_new,_a_new = self._get_index(newstate[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
                 s_old,a_old = self._get_index(oldstate[k],action[k])
-                self._Q[s_old,a_old] += lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old,a_old])
+                self._Q[s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old,a_old])
         else:
             for  k in range(self._nAgents):
                 s_new,_a_new = self._get_index(newstate[k],action[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
                 s_old,a_old = self._get_index(oldstate[k],action[k])
-                self._Q[k][s_old,a_old] += lr* (reward + gamma * np.amax(self._Q[k][s_new]) - self._Q[k][s_old,a_old])
+                self._Q[k][s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[k][s_new]) - self._Q[k][s_old,a_old])
 
                 #This could be more efficient but applicable only in this case
                 # if np.random.random() < (1 - self.epsilon):
@@ -144,6 +147,7 @@ class actionValue(object):
 
     def makeGreedy(self):
         self.epsilon -= self._upgrade_e
+        # self.lr -= self._upgrade_lr
         return self.epsilon
     
     def get_onPolicy_action(self,s):
