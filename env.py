@@ -39,11 +39,16 @@ from numba import jit
 
 
 #PHYSICAL PARAMETERS
+#scaling --> keep zeta =1 and k same order of zeta, k = zeta
+zeta = 1
+elastic_constant = 1 
 
-elastic_constant = 100 #does not matter for overdamped..
-mass = 1
-reduced_k = elastic_constant/mass #overdsmped limit if k>>m but dt must be 
-dt = 0.5#0.5
+mass = 10 # mass < 0,1 overdamped limit
+
+
+reduced_m_inv = zeta/mass
+reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
+dt = 0.2
 
 #NEW: ASSUME k and zeta same order both in overdamped and damped
 
@@ -213,6 +218,7 @@ class Agent(object):
     @position.setter
     def position(self,coordinate):
         self._position = self._box.periodicB(np.array(coordinate))
+
             
 
 def build_tentacle(n_suckers,box,l0, exploringStarts = False):
@@ -284,7 +290,7 @@ class   Environment(object):
          # in future, target --> list of targets
         
         self.isMultiagent = is_multiagent
-        self.isOverdamped = isOverdamped
+        self._isOverdamped = isOverdamped
 
 
         self.omega = omega 
@@ -314,23 +320,28 @@ class   Environment(object):
             print("**Multiagent**")
         else:
             self._nagents = 1
-        if isOverdamped:
+        if self._isOverdamped:
             print("OVERDAMPED DYNAMICS")
+            self.step=self._stepOverdamped
         else:
             print("NON OVERDAMPED:")
             print("delta t = ",self.deltaT)
-            print("k/m = ",reduced_k)
-
-        # descriptors of the dynamics and environment
-
-        #new non overdamped
-        if not isOverdamped:
+            print("m/zeta = ",mass/zeta)
             for sucker in self._agents:
                 sucker._acceleration_old = self._get_acceleration(sucker)
+            self.step = self._stepDamped
+
+        if self._box.dimensions == 2:
+            raise NameError ("2D dynamics not implemented yet")
+            
 
         self._tip_positions= []
         self._CM_position = []
         self._telapsed = []
+        self._telapsed.append(self._t)
+        self._CM_position.append(self.get_CM())
+        self._tip_positions.append(self.get_tip())
+        
         self.cumulatedReward = 0
 
         #rendering data
@@ -350,14 +361,17 @@ class   Environment(object):
         else:
             self.action_space = np.power(2,n_suckers)
             self.state_space = np.power(8,n_suckers)# np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
-    
-    # def infinite_damping(self):
-    #     '''
-    #     Open question: set infinite dissipation everywehere by setting velocities to 0?
-    #     '''
-    #     for sucker in self._agents:
-    #         sucker._velocity_old= 0
-    #         sucker._acceleration_old = self._get_acceleration(sucker)
+
+    @property
+    def isOverdamped(self):
+        return self._isOverdamped
+    @isOverdamped.setter
+    def isOverdamped(self,overdamped):
+        self._isOverdamped = overdamped
+        if overdamped:
+            self.step=self._stepOverdamped
+        else:
+            self.step=self._stepDamped
 
     def reset(self,exploringStarts = False,fps = FPS):
 
@@ -377,13 +391,17 @@ class   Environment(object):
         self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,exploringStarts=exploringStarts))
         self._tip_positions = []
         self._CM_position = []
-        # self._figTip = None
-        # self._figCM = None
+
+        self._telapsed.append(self._t)
+        self._CM_position.append(self.get_CM())
+        self._tip_positions.append(self.get_tip())
+
+        
         self.cumulatedReward = 0 #total reward per episode
 
         if fps != FPS:
             self.window = None
-        if not self.isOverdamped:
+        if not self._isOverdamped:
             for sucker in self._agents:
                 sucker._acceleration_old = self._get_acceleration(sucker)
     
@@ -461,40 +479,6 @@ class   Environment(object):
 
         #update old posiiton
         self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position
-
-
-        # states = []
-        # for k in range(self._nagents):
-        #     if self._agents[k].leftNeighbor is None:
-        #         #BASE
-        #         dright = -self._agents[k].position +self._agents[k].rightNeighbor.position #should always be positive
-        #         # print(dright)
-        #         if dright<0:
-        #             # print('here')
-        #             dright = dright +  self._box.boundary
-        #             # print(dright)
-        #         right_tension = sign0(dright-self.l0(self._t,k,self._nagents))#positive argument positve force (elongated)
-
-        #         left_tension = right_tension #not sure SEE WITH AGNESE
-
-
-        #         states.append((left_tension,right_tension))
-
-        #         continue
-        #     else:
-        #         dleft = self._agents[k].position - self._agents[k].leftNeighbor.position #should always be positive
-        #         if dleft<0:
-        #             dleft = dleft + self._box.boundary
-        #         left_tension = sign0(dleft-self.l0(self._t,k-1,self._nagents))#positive argument negative force (elongated)
-        #     if self._agents[k].rightNeighbor is None:
-        #         # TIP
-        #         right_tension = left_tension #not sure SEE WITH AGNESE
-        #     else:
-        #         # right_tension = sign(-self._agents[k].position + self._agents[k].rightNeighbor.position-self.l0(self._t,k,self._nagents))
-                
-        #         dright = -self._agents[k].position + self._agents[k].rightNeighbor.position
-        #         right_tension = sign0(dright-self.l0(self._t,k,self._nagents))
-        #     states.append((left_tension,right_tension))
 
 
         if multiagent:
@@ -592,174 +576,14 @@ class   Environment(object):
             right_tension = dright-self.l0(self._t,k)  #negative argument = pushing left (compressed)
         except:
             #TIP
-            # print("tip")
             right_tension = 0
-        # print(left_tension,right_tension)
-        return reduced_k*(right_tension - left_tension)
+        return reduced_m_inv*(reduced_k*(right_tension - left_tension)-sucker._velocity_old) 
+    
 
-    def step(self,action):
+    def _getReward(self):
         '''
-        Update rule in overdamped strictly should be instantaneous--> a choice is made over updating from base to tip not completely correct
-        NEW: imoplementing syncronous version of overdamped based on evolving previous position from finite velocity (finite friction)
-        NEW: implementing damped dynamics. --> TODO: consider finite friction
-        IMPORTANT: old position update upon call to get state function
+        Computes reward and checks terminal condition 
         '''
-
-        #IMPORTANT: Consider that any update on .position, enforces automatically boundary conditions
-
-        isOverdamped = self.isOverdamped
-
-        if self._box.dimensions == 2:
-            raise NameError ("2D dynamics not implemented yet")
-        
-
-        
-        # oldState = self.get_state()
-        self._telapsed.append(self._t)
-        self._t += self.deltaT
-        self._nsteps +=1
-        #compute needed l0 values
-
-        #must contemplate a single agent action and multiagent one.
-        #To do so action is a dictionary where the key is the sucker ida
-        #ATTENZIONE : EVOLUZIONE SCRITTA COSI VALE SOLO IN 1D!!
-
-
-        #TODO treat explicitly base and tip for efficiency
-        if not isOverdamped:
-            #raise NameError ("Non overdamped dynamics is not implemented ")
-            for sucker in self._agents: 
-                k = sucker._id
-                # print(k,action[k])
-                sucker.lastAction = action[k]
-                # print(sucker._velocity_old,sucker._acceleration_old)
-                if action[k] ==1:
-                    # print('here')
-                    sucker.position = sucker._position_old
-                    #sucker._acceleration_old = 0#-2*sucker._velocity_old/dt - sucker._acceleration_old #(for consistency)
-                    # acceleration = self._get_acceleration(sucker) 
-                    # sucker._velocity_old = -0.5*dt*acceleration#0
-                    # sucker._acceleration_old = acceleration
-                    sucker._velocity_old =0
-                    sucker._acceleration_old =0
-                    continue
-                    #self._agents[k].position = self._agents[k]._position_old
-                else:
-                    acceleration = self._get_acceleration(sucker) #acceleration on old positions (or non sincronous updates)
-                    velocity = self._get_velocity(sucker,acceleration) #current velocity
-                    
-                    sucker.position =  sucker._position_old + self.deltaT*velocity +0.5*self.deltaT*self.deltaT* acceleration
-                    
-                    sucker._acceleration_old = acceleration
-                    sucker._velocity_old = velocity
-                    
-                    # print(sucker.position,sucker._position_old,sucker._acceleration_old,sucker._velocity_old)
-                    
-                    # sucker._position_old = sucker.position #CANNOT BE IN THIS LOOP SINCE NEIGHBORS NEED OLD POSITION
-                    #could try somenthing like this..
-                    #sucker.leftNeighbor.leftNeighbor._position_old = sucker.leftNeighbor.leftNeighbor._position
-        
-        
-        else:
-            #provvisorio
-            asincronous = False
-            if(asincronous):
-
-            #BASE
-                if action[0] == 0:
-                    self._agents[0].position = self._agents[0].rightNeighbor._position - self.l0(self._t,0)
-                else:
-                    pass
-                self._agents[0].lastAction=action[0]
-                for sucker in self._agents[1:self._nsuckers-1]:
-                    k = sucker._id
-                    # print(k)
-                    if action[k] == 1:  
-                        pass #Do nothing.. position unchanged
-                    elif action[k] == 0:
-                        pleft = sucker.leftNeighbor._position
-                        pright = sucker.rightNeighbor._position
-                        if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
-                            pright = pright + self._box.boundary
-                        sucker.position = 0.5*(pright + pleft + self.l0(self._t,k-1) - self.l0(self._t,k))
-                    sucker.lastAction = action[k]
-                #TIP 
-                if action[self._nsuckers-1] == 0:
-                    self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1].leftNeighbor._position +self.l0(self._t,self._nsuckers-1-1)
-                else:
-                    pass
-                self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
-            else:
-                # print('here')
-                #Syncronous overdamped
-                #BASE
-                if action[0] == 0:
-                    pright = self._agents[0].rightNeighbor._position
-                    dist = pright -self._agents[0].position
-                    if dist<0:
-                        dist += self._box.boundary
-                    inst_vel = (dist  - self.l0(self._t,0))
-                    self._agents[0].position = self._agents[0]._position_old + self.deltaT * inst_vel
-                else:
-                    pass
-                self._agents[0].lastAction=action[0]
-                #INTERMEDIATE
-                for sucker in self._agents[1:self._nsuckers-1]:
-                    k = sucker._id
-                    sucker.lastAction = action[k]
-                    if action[k] == 1:  
-                        pass #Do nothing.. position unchanged
-                    else:
-                        pleft = sucker.leftNeighbor._position
-                        pright = sucker.rightNeighbor._position
-                        if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
-                            pright = pright + self._box.boundary
-                        inst_vel = (pright + pleft-2*sucker.position + self.l0(self._t,k-1) - self.l0(self._t,k))
-                        sucker.position = sucker._position_old + self.deltaT * inst_vel
-                #TIP
-                if action[self._nsuckers-1] == 0:
-                    pleft = self._agents[self._nsuckers-1].leftNeighbor._position
-                    dist = self._agents[self._nsuckers-1].position -pleft
-                    if dist<0:
-                        dist+=self._box.boundary
-                    inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
-                    self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + self.deltaT * inst_vel
-                else:
-                    pass
-                self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
-
-
-                # A = np.zeros((self._nsuckers,self._nsuckers))
-                # L = np.zeros(self._nsuckers-1)
-                
-                # if action[0] == 0:
-                #     A[0,1] = -1 #-A
-                #     A[0,0] = 1 #identity
-                #     L [0] = -self.l0(self._t,0)
-                # else:
-                #     pass #TODO
-                # for k in range(1,self._nsuckers-1):
-                #     if action[k] == 0:
-                #         A[k,k] = 1 #identity
-                #         A[k,k-1] = -0.5 #-A
-                #         A[k,k+1] = -0.5 #-A
-                #         # populate l vector with already applied the operator
-                #         L [k] = 0.5*self.l0(self._t,k-1)-0.5*self.l0(self._t,k)
-                #     else:
-                #         pass #TODO
-                # if action[self._nsuckers-1] == 0:
-                #     L [self._nsuckers-2] = self.l0(self._t,self._nsuckers-2)
-                #     A[self._nsuckers-1,self._nsuckers-2] =1
-                
-
-            
-            
-
-#REWARD AND TERMINAL STATE
-
-        terminal = False 
-
-        touching = [(abs(a.position - self._tposition[0])<= minDistance)[0] for a in self._agents]
 
         #phase_velocity = omega*2*math.pi*self.carrierFraction/(self._n_agents)
         #velocity = 0.5/dt*(self._CM_position[-1] - self._CM_position[-2])#need several orders to be distinguishible from advancement
@@ -767,6 +591,10 @@ class   Environment(object):
         # velocityn = sum(self._CM_position[-int(len(self._CM_position)/2):]) - sum(self._CM_position[:int(len(self._CM_position)/2)])
 
 
+
+        terminal = False 
+
+        touching = [(abs(a.position - self._tposition[0])<= minDistance)[0] for a in self._agents]
         #CM BASED
         try:
             advancing = self._CM_position[-1]-self._CM_position[-2]
@@ -790,14 +618,147 @@ class   Environment(object):
             # reward = 1   #numrically instable to givr both rewards (velocity and touching)
                             # stick to one
             #Could it be  different in single and muilti agent?
-    
+        
+        self.cumulatedReward += reward #cumulated reward in the episode
+        
+
+        return reward,terminal
+
+    def _stepDamped(self,action):
+        '''
+        NEW: implementing damped dynamics. --> TODO: consider finite friction
+        IMPORTANT: old position update upon call to get state function <--
+        '''
+
+        #TODO treat explicitly base and tip for efficiency
+
+        #raise NameError ("Non overdamped dynamics is not implemented ")
+        for sucker in self._agents: 
+            k = sucker._id
+            # print(k,action[k])
+            sucker.lastAction = action[k]
+            # print(sucker._velocity_old,sucker._acceleration_old)
+            if action[k] ==1:
+                # print('here')
+                sucker.position = sucker._position_old
+                #sucker._acceleration_old = 0#-2*sucker._velocity_old/dt - sucker._acceleration_old #(for consistency)
+                # acceleration = self._get_acceleration(sucker) 
+                # sucker._velocity_old = -0.5*dt*acceleration#0
+                # sucker._acceleration_old = acceleration
+                sucker._velocity_old =0
+                sucker._acceleration_old =0
+                continue
+                #self._agents[k].position = self._agents[k]._position_old
+            else:
+                acceleration = self._get_acceleration(sucker) #acceleration on old positions
+                sucker._acceleration_old = acceleration
+                sucker.position =  sucker._position_old + self.deltaT*sucker._velocity_old +0.5*self.deltaT*self.deltaT* sucker._acceleration_old
+
+                
+                velocity = self._get_velocity(sucker,acceleration) #new velocity
+                
+                sucker._velocity_old = velocity
+                
+       
+
         self._tip_positions.append(self.get_tip())
         self._CM_position.append(self.get_CM())
 
-        newState = self.get_state()#also updates old positions <--
 
-        self.cumulatedReward += reward #cumulated reward in the episode
+        reward,terminal = self._getReward()
+        newState = self.get_state()#also updates old positions <--
         
+        self._telapsed.append(self._t)
+        self._t += self.deltaT
+        self._nsteps +=1
+
+
+        return  newState,reward,terminal 
+
+    def _stepOverdamped(self,action):
+        '''
+        Update rule in overdamped strictly should be instantaneous--> a choice was made over updating from base to tip not completely correct
+        NEW: imoplementing syncronous version of overdamped based on evolving previous position from finite velocity (finite friction)
+        #IMPORTANT: Consider that any update on .position, enforces automatically boundary conditions
+        '''
+
+            # #BASE
+            #     if action[0] == 0:
+            #         self._agents[0].position = self._agents[0].rightNeighbor._position - self.l0(self._t,0)
+            #     else:
+            #         pass
+            #     self._agents[0].lastAction=action[0]
+            #     for sucker in self._agents[1:self._nsuckers-1]:
+            #         k = sucker._id
+            #         # print(k)
+            #         if action[k] == 1:  
+            #             pass #Do nothing.. position unchanged
+            #         elif action[k] == 0:
+            #             pleft = sucker.leftNeighbor._position
+            #             pright = sucker.rightNeighbor._position
+            #             if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
+            #                 pright = pright + self._box.boundary
+            #             sucker.position = 0.5*(pright + pleft + self.l0(self._t,k-1) - self.l0(self._t,k))
+            #         sucker.lastAction = action[k]
+            #     #TIP 
+            #     if action[self._nsuckers-1] == 0:
+            #         self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1].leftNeighbor._position +self.l0(self._t,self._nsuckers-1-1)
+            #     else:
+            #         pass
+            #     self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
+                #Syncronous overdamped
+                #BASE
+        # print("here")
+
+        if action[0] == 0:
+            pright = self._agents[0].rightNeighbor._position
+            dist = pright -self._agents[0].position
+            if dist<0:
+                dist += self._box.boundary
+            inst_vel = (dist  - self.l0(self._t,0))
+            self._agents[0].position = self._agents[0]._position_old + self.deltaT * inst_vel
+        else:
+            pass
+        self._agents[0].lastAction=action[0]
+        #INTERMEDIATE
+        for sucker in self._agents[1:self._nsuckers-1]:
+            k = sucker._id
+            sucker.lastAction = action[k]
+            if action[k] == 1:  
+                pass #Do nothing.. position unchanged
+            else:
+                pleft = sucker.leftNeighbor._position
+                pright = sucker.rightNeighbor._position
+                if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
+                    pright = pright + self._box.boundary
+                inst_vel = (pright + pleft-2*sucker.position + self.l0(self._t,k-1) - self.l0(self._t,k))
+                sucker.position = sucker._position_old + self.deltaT * inst_vel
+        #TIP
+        if action[self._nsuckers-1] == 0:
+            pleft = self._agents[self._nsuckers-1].leftNeighbor._position
+            dist = self._agents[self._nsuckers-1].position -pleft
+            if dist<0:
+                dist+=self._box.boundary
+            inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
+            self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + self.deltaT * inst_vel
+        else:
+            pass
+        self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
+
+
+        #REWARD AND TERMINAL STATE
+        
+        self._tip_positions.append(self.get_tip())
+        self._CM_position.append(self.get_CM())
+
+
+        reward,terminal = self._getReward()
+        newState = self.get_state()#also updates old positions <--
+        
+
+        self._telapsed.append(self._t)
+        self._t += self.deltaT
+        self._nsteps +=1
 
         return  newState,reward,terminal 
 
@@ -816,16 +777,16 @@ class   Environment(object):
             
             
         
-        for l in self._currentPlotTip:
-            l.remove()
+        # for l in self._currentPlotTip:
+        #     l.remove()
         
         self._figTip.set_title(label='Tip position, episode '+str(self._episode))
         self._currentPlotTip = self._figTip.plot(self._telapsed,self._tip_positions,linewidth=2)
 
 
-        if self._box.dimensions==1:
-                print(self._tposition[0])
-                self._figTip.hlines(self._tposition[0][0],xmin=0,xmax=self._telapsed[-1],ls='--',color='red')
+        # if self._box.dimensions==1:
+        #         print(self._tposition[0])
+        #         self._figTip.hlines(self._tposition[0][0],xmin=0,xmax=self._telapsed[-1],ls='--',color='red')
         plt.ion()
         plt.show()
 
@@ -840,8 +801,8 @@ class   Environment(object):
         
         # self._figCM.cla()
         # print(self._telapsed[:10],self._tip_positions[:10])
-        for l in self._currentPlotCM:
-            l.remove()
+        # for l in self._currentPlotCM:
+        #     l.remove()
         self._figCM.set_title(label='CM position, episode '+str(self._episode))
         self._currentPlotCM=self._figCM.plot(self._telapsed,self._CM_position,linewidth=2)
         
