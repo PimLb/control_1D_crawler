@@ -1,10 +1,15 @@
+#TODO implement tools to monitor learning (value computation, convergence ecc)
+
+import matplotlib.pyplot as plt
 import numpy as np
 
-lr = 0.05#learning rate
-min_lr = 0.01
+max_lr = 0.3#learning rate
+min_lr = 0.05
 gamma = 0.9#discount 0.9 to reflect upon..
-epsilon = 0.6
-min_epsilon =0.
+max_epsilon = 0.9
+min_epsilon =0.05
+
+ 
 
 
 def interpret_binary(s:tuple):
@@ -18,31 +23,49 @@ def make_binary(index:int):
     return [int(i) for i in bin(index)[2:]]
 
 class actionValue(object):
-    def __init__(self,learning_space:tuple,nAgents,n_episodes,collapse = True) -> None:
+    def __init__(self,learning_space:tuple,nAgents,total_episodes,collapse = True) -> None:
         self._state_space = learning_space[0]
         self._action_space = learning_space[1]
         self._nAgents = nAgents
-        self.epsilon = epsilon
-        self.lr = lr
+        self.epsilon = max_epsilon
+        self.lr = max_lr
         self.discount = gamma
-        self._upgrade_e = (epsilon-min_epsilon)/n_episodes
-        self._upgrade_lr = (lr-min_lr)/n_episodes
-        if collapse:
-            self._parallelUpdate = True
-            self.dim = learning_space
-            print("\n** HIVE UPDATE **\n")
-        else:
-            self._parallelUpdate = False
-            self.dim = learning_space + (nAgents,)
+
+        scheduling_steps = total_episodes - int(total_episodes/4) #n_episodes
+        print("scheduling steps =", scheduling_steps)
+        print("greedy steps =", total_episodes - scheduling_steps)
+        self._upgrade_e = (max_epsilon-min_epsilon)/scheduling_steps
+        self._upgrade_lr = (max_lr-min_lr)/scheduling_steps
+
+        self.n_episodes = 0
+
+        self.scheduled_epsilon = [max_epsilon-self._upgrade_e*i for i in range(scheduling_steps)] + [min_epsilon] * (total_episodes-scheduling_steps)
+        self.scheduled_lr = [max_lr-self._upgrade_lr*i for i in range(scheduling_steps)] + [min_lr] * (total_episodes-scheduling_steps)
+
+        # print(len(self.scheduled_epsilon))
         if nAgents>1:
-            self._multiAgent = True    
+            self._multiAgent = True
+            if collapse:
+                self._parallelUpdate = True
+                self.dim = learning_space
+                print("\n** HIVE UPDATE **\n")
+                self.update = self._update_Q_parallel
+                self.get_action = self._get_action_hiveUpdate
+                
+            else:
+                self._parallelUpdate = False
+                self.dim = learning_space + (nAgents,)
+                self.update = self._update_Q_single
+                self.get_action = self._get_action_not_hiveUpdate
+  
         else:
             self._multiAgent = False
-
+            self.get_action = self._get_action_singleAgent 
+            self.dim = learning_space
         
 
 
-        Q = np.random.random(learning_space)#np.zeros(learning_space)
+        Q = np.random.random(self.dim)#np.zeros(learning_space)
         
         if not collapse and self._multiAgent:
             self._Q = []
@@ -51,10 +74,27 @@ class actionValue(object):
         else:
             self._Q = Q
 
+
+        #convergence observables:
+        self._oldQ = self._Q.copy()
+        
+        self._convergence = []
+        #VALUE
+        # second index to contain correspondent policy. For 2 action space, 0 or 1 (= argmax) to be associated to color in plot
+        self._value = []
+        self._av_value = []
+        self._value.append(self.get_value())
+        self._av_value.append(np.mean(self.get_value()[:,0]))
+        self._fig_value = None
+        self._fig_av_value =None
+        self._fig_convergence = None
+
         
     def reset(self):
-        self._Q = np.zeros(self.dim)
-        self.epsilon = epsilon
+        self.n_episodes = 0
+        self._Q = np.random.random(self.dim)
+        self.epsilon = max_epsilon
+        self.lr = max_lr
     
     def _get_index(self,state,action=0):
         if self._multiAgent:
@@ -70,73 +110,59 @@ class actionValue(object):
             j = interpret_binary(action)
             
         return i,j
-    def _update_Q(self,newstate,oldstate,action,reward):
+    def _update_Q_parallel(self,newstate,oldstate,action,reward):
         '''
         Update the Q function, return new action.
-        Both encompass a distinct Q function for each agent, and a single one which is updated by all agents.
-        The latter is for the nature of the problem. Conceptually it's still multiagent for how the states
+        Single Q which is updated by all agents.
+        Conceptually it's still multiagent for how the states
         have been defined
         '''
+        for  k in range(0,self._nAgents):
+            s_new,_a_new = self._get_index(newstate[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
+            s_old,a_old = self._get_index(oldstate[k],action[k])
+            self._Q[s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old,a_old])
 
+        #UPDATE OBSERVABLES
+        self._value.append(self.get_value())
+        self._av_value.append(np.mean(self.get_value()[:,0]))
+        self._convergence.append(np.amax(np.abs(self._Q -self._oldQ)))
+
+    def _update_Q_single(self,newstate,oldstate,action,reward):
         #update each agent Q
-        if self._parallelUpdate:
-            for  k in range(0,self._nAgents):
-                s_new,_a_new = self._get_index(newstate[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
-                s_old,a_old = self._get_index(oldstate[k],action[k])
-                self._Q[s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old,a_old])
-        else:
-            for  k in range(self._nAgents):
-                s_new,_a_new = self._get_index(newstate[k],action[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
-                s_old,a_old = self._get_index(oldstate[k],action[k])
-                self._Q[k][s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[k][s_new]) - self._Q[k][s_old,a_old])
+        for  k in range(self._nAgents):
+            s_new,_a_new = self._get_index(newstate[k],action[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
+            s_old,a_old = self._get_index(oldstate[k],action[k])
+            self._Q[k][s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[k][s_new]) - self._Q[k][s_old,a_old])
 
-                #This could be more efficient but applicable only in this case
-                # if np.random.random() < (1 - self.epsilon):
-                #     newaction.append(np.argmax(self._Q[k][s_new]))
-                # else:
-                #     newaction.append(np.random.randint(0,  self.action_space))
-
-        
+            #This could be more efficient but applicable only in this case
+            # if np.random.random() < (1 - self.epsilon):
+            #     newaction.append(np.argmax(self._Q[k][s_new]))
+            # else:
+            #     newaction.append(np.random.randint(0,  self.action_space))
+        #NOT IMPLEMENTED --> (need one for each Q) UPDATE OBSERVABLES
     
-    def update(self,newState,oldState,oldAction,reward):
-        # newState = env._newState
-        # oldState = env._oldState
-        # oldAction = env._oldAction
-        # reward = env._current_reward
-        self._update_Q(newState,oldState,oldAction,reward)
-
-        
-    def get_action(self,s):
-        
-        if self._multiAgent:
-            new_action = []
-            if self._parallelUpdate:
-                #single Q funcion updated by each agent. 
-                #Fetching action for each agent looping through each agent state
-                for k in range(self._nAgents):
-                    # print(s[k])
-                    #SKIPPING THOSE
-                    # if(k==0 or k==self._nAgents-1):
-                    #     new_action.append(0)
-                    #     continue
-                    sind,_a = self._get_index(s[k])
-                    # print(s[k],sind)
-                    if np.random.random() < (1 - self.epsilon):
-                        # print("greedy")
-                        new_action.append(np.argmax(self._Q[sind]))
-                    else:
-                        new_action.append(np.random.randint(0,  self._action_space))
+    def _get_action_hiveUpdate(self,s):
+        new_action = []
+        for k in range(self._nAgents):
+            sind,_a = self._get_index(s[k])
+            if np.random.random() < (1 - self.epsilon):
+                new_action.append(np.argmax(self._Q[sind]))
             else:
-                #one Q function for each agent
-                for k in range(self._nAgents):
-                    sind,_a = self._get_index(s[k])
-                    if np.random.random() < (1 - self.epsilon):
-                        new_action.append(np.argmax(self._Q[k][sind]))
-                    else:
-                        new_action.append(np.random.randint(0,  self._action_space))
-            return new_action
-        else:
-            #CHECK
+                new_action.append(np.random.randint(0,self._action_space))
+        return new_action
+    def _get_action_not_hiveUpdate(self,s):
+        #ATTENTION never tested
+        new_action = []
+        for k in range(self._nAgents):
+            sind,_a = self._get_index(s[k])
+            if np.random.random() < (1 - self.epsilon):
+                new_action.append(np.argmax(self._Q[k][sind]))
+            else:
+                new_action.append(np.random.randint(0,self._action_space))
+        return new_action
+    def _get_action_singleAgent(self,s):
+        #ATTENTION never tested
+        #CHECK again and again
             if np.random.random() < (1 - self.epsilon):
                 sind,_a = self._get_index(s)
                 new_action=np.argmax(self._Q[sind])
@@ -144,11 +170,51 @@ class actionValue(object):
                 new_action=np.random.randint(0,  self._action_space)
 
             return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
+    
+    # def get_action(self,s):
+        
+    #     if self._multiAgent:
+    #         new_action = []
+    #         if self._parallelUpdate:
+    #             #single Q funcion updated by each agent. 
+    #             #Fetching action for each agent looping through each agent state
+    #             for k in range(self._nAgents):
+    #                 # print(s[k])
+    #                 #SKIPPING THOSE
+    #                 # if(k==0 or k==self._nAgents-1):
+    #                 #     new_action.append(0)
+    #                 #     continue
+    #                 sind,_a = self._get_index(s[k])
+    #                 # print(s[k],sind)
+    #                 if np.random.random() < (1 - self.epsilon):
+    #                     # print("greedy")
+    #                     new_action.append(np.argmax(self._Q[sind]))
+    #                 else:
+    #                     new_action.append(np.random.randint(0,self._action_space))
+    #         else:
+    #             #one Q function for each agent
+    #             for k in range(self._nAgents):
+    #                 sind,_a = self._get_index(s[k])
+    #                 if np.random.random() < (1 - self.epsilon):
+    #                     new_action.append(np.argmax(self._Q[k][sind]))
+    #                 else:
+    #                     new_action.append(np.random.randint(0,  self._action_space))
+    #         return new_action
+    #     else:
+    #         #CHECK
+    #         if np.random.random() < (1 - self.epsilon):
+    #             sind,_a = self._get_index(s)
+    #             new_action=np.argmax(self._Q[sind])
+    #         else:
+    #             new_action=np.random.randint(0,  self._action_space)
+
+    #         return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
 
     def makeGreedy(self):
-        self.epsilon -= self._upgrade_e
-        # self.lr -= self._upgrade_lr
-        return self.epsilon
+        self.lr = self.scheduled_lr[self.n_episodes]
+        self.epsilon = self.scheduled_epsilon[self.n_episodes]
+        self.n_episodes+=1
+        
     
     def get_onPolicy_action(self,s):
         if self._multiAgent:
@@ -173,6 +239,32 @@ class actionValue(object):
     
     
     def get_value(self):
-        return self._Q
+        return np.vstack((np.amax(self._Q,axis=1),np.argmax(self._Q,axis=1))).T
     
+
+    def plot_value(self):
+        if self._fig_value is None:
+            self._episodes = [e for e in range(self.n_episodes)]
+            plt.figure()
+            self._fig_value = plt.subplot(xlabel='episode', ylabel='value')
+            self._fig_value.set_title(label='Values ('+str(self._state_space) + ' states)')
+        
+        for i in range(self._state_space):
+            self._fig_value.plot()
+            
+    
+    def plot_av_value(self):
+        if self._fig_av_value is None:
+            self._episodes = [e for e in range(self.n_episodes)]
+            plt.figure()
+            self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+
+    
+    def plot_convergence(self):
+        if self._fig_convergencee is None:
+            self._episodes = [e for e in range(self.n_episodes)]
+            plt.figure()
+            self._fig_value = plt.subplot(xlabel='episode', ylabel='convergence')
+            
+
    
