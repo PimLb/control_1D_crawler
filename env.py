@@ -48,7 +48,7 @@ mass = 10 # mass < 0,1 overdamped limit
 
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
-dt = 0.2
+dt = 0.1
 
 #NEW: ASSUME k and zeta same order both in overdamped and damped
 
@@ -227,7 +227,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
     '''
     # Info on space from box objec
     A = []
-    offset_x = box.boundary[0]/2.5 #box.boundary[0]/n_suckers
+    offset_x = box.boundary[0]/4 #box.boundary[0]/n_suckers
     # print("offset= ",offset_x, box.boundary[0]-offset_x)
     #fare in modo di avere None dove indice non esiste
     # old_position = offset_x
@@ -292,16 +292,17 @@ class   Environment(object):
         self.isMultiagent = is_multiagent
         self._isOverdamped = isOverdamped
 
-
-        self.omega = omega 
         self.carrierMode = carrierMode
         self._nsuckers=n_suckers
+        self.omega = omega 
+       
         print("Carrier modes= ",carrierMode)
         box = Box(sim_shape)
         self._box = box
         
         self._t= 0
         self.deltaT = dt
+        self.inv_DeltaT = 1./dt
         self._nsteps = 0
         self._episode = 1
         self._universe = {"agents":[],"target":[]}
@@ -337,6 +338,7 @@ class   Environment(object):
 
         self._tip_positions= []
         self._CM_position = []
+        self._vel =[]
         self._telapsed = []
         self._telapsed.append(self._t)
         self._CM_position.append(self.get_CM())
@@ -373,6 +375,15 @@ class   Environment(object):
         else:
             self.step=self._stepDamped
 
+    @property
+    def omega(self):
+        return self._omega
+    @omega.setter
+    def omega(self,omega):
+        self._omega = omega
+        self._phase_velocity = omega*self._nsuckers*self.carrierMode/2*math.pi
+        print("phase velocity carrier pulse = ", self._phase_velocity)
+
     def reset(self,exploringStarts = False,fps = FPS):
 
         #maybe useless. I'm afraid of memory leaks..
@@ -394,6 +405,7 @@ class   Environment(object):
 
         self._telapsed.append(self._t)
         self._CM_position.append(self.get_CM())
+        self._vel =[]
         self._tip_positions.append(self.get_tip())
 
         
@@ -536,12 +548,24 @@ class   Environment(object):
 
     def get_tip(self):
         return self._agents[-1].position[0]
+    
     def get_CM(self):
-        ''' 2 choices: average of sucker positions or the middle of the tentacle
-           Better the first to account for compressive motions in the right direction
-        '''
         return np.average([a.position for a in self._agents])
         #return 0.5*(self._agents[0].position+self._agents[-1].position)
+
+    def get_instVel(self):
+        vel = self.inv_DeltaT*(self._CM_position[-1]-self._CM_position[-2])
+        self._vel.append(vel)
+        return vel
+
+    def get_averageVel(self):
+        '''
+        Returns average tentacle velocity in the current episode
+        '''
+        return np.average(self._vel)
+
+
+
     def get_observation(self):
         '''returns a human readable observation (position of each sucker)'''
         CM = self.get_CM()
@@ -591,15 +615,14 @@ class   Environment(object):
         # velocityn = sum(self._CM_position[-int(len(self._CM_position)/2):]) - sum(self._CM_position[:int(len(self._CM_position)/2)])
 
 
-
+        #TERMINAL CONDITION
         terminal = False 
-
         touching = [(abs(a.position - self._tposition[0])<= minDistance)[0] for a in self._agents]
+
+
         #CM BASED
-        try:
-            advancing = self._CM_position[-1]-self._CM_position[-2]
-        except IndexError:
-            advancing = 0
+        #advancing = self._CM_position[-1]-self._CM_position[-2]
+        vel = self.get_instVel()
 
         #TIP BASED
         # try:
@@ -607,19 +630,26 @@ class   Environment(object):
         # except IndexError:
         #     advancing = 0
         
+        #reward = vel #numerically more stable scheme since magnitude of reward always consistent
+
+        #ALTERNATIVE: only give -1 reward for backward and make wall reachable in training.. (so that less negative reward if episode ends)
        
-        if advancing>0:
-            reward = advancing #to enforce higher speed..
+        if vel>0:
+            reward = vel #to promote higher speed..
         else:
             reward = -1
+        
+        self.cumulatedReward += reward #cumulated reward in the episode
+
         if touching[-1]:
             print(touching)
             terminal = True
+            #reward = self.cumulatedReward #per biasare ulteriormente learning tentacoli veloci quando esistono policies sub-ottimali simili. Stesseo risultato dovrebbe essere raggiungibile con molti steps
             # reward = 1   #numrically instable to givr both rewards (velocity and touching)
-                            # stick to one
+            
             #Could it be  different in single and muilti agent?
         
-        self.cumulatedReward += reward #cumulated reward in the episode
+        
         
 
         return reward,terminal
