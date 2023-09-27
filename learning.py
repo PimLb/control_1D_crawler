@@ -1,15 +1,14 @@
 #TODO implement tools to monitor learning (value computation, convergence ecc)
 
-import matplotlib.pyplot as plt
+from globals import *
 import numpy as np
 
 max_lr = 0.3#learning rate
 min_lr = 0.05
 gamma = 0.9#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.05
+min_epsilon =0.1
 
- 
 
 
 def interpret_binary(s:tuple):
@@ -34,6 +33,7 @@ class actionValue(object):
         scheduling_steps = total_episodes - int(total_episodes/4) #n_episodes
         print("scheduling steps =", scheduling_steps)
         print("greedy steps =", total_episodes - scheduling_steps)
+        self._greedySteps = total_episodes - scheduling_steps
         self._upgrade_e = (max_epsilon-min_epsilon)/scheduling_steps
         self._upgrade_lr = (max_lr-min_lr)/scheduling_steps
 
@@ -122,10 +122,7 @@ class actionValue(object):
             s_old,a_old = self._get_index(oldstate[k],action[k])
             self._Q[s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old,a_old])
 
-        #UPDATE OBSERVABLES
-        self._value.append(self.get_value())
-        self._av_value.append(np.mean(self.get_value()[:,0]))
-        self._convergence.append(np.amax(np.abs(self._Q -self._oldQ)))
+        
 
     def _update_Q_single(self,newstate,oldstate,action,reward):
         #update each agent Q
@@ -214,6 +211,11 @@ class actionValue(object):
         self.lr = self.scheduled_lr[self.n_episodes]
         self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
+        #UPDATE OBSERVABLES
+        self._value.append(self.get_value())
+        self._av_value.append(np.mean(self.get_value()[:,0]))
+        self._convergence.append(np.amax(np.abs(self._Q -self._oldQ)))
+        self._oldQ = self._Q.copy()
         
     
     def get_onPolicy_action(self,s):
@@ -241,30 +243,51 @@ class actionValue(object):
     def get_value(self):
         return np.vstack((np.amax(self._Q,axis=1),np.argmax(self._Q,axis=1))).T
     
+    def get_conv(self):
+        return self._convergence[-1]
+    
 
     def plot_value(self):
         if self._fig_value is None:
-            self._episodes = [e for e in range(self.n_episodes)]
-            plt.figure()
-            self._fig_value = plt.subplot(xlabel='episode', ylabel='value')
+            plt.figure(figsize=(10, 6))
+            self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
             self._fig_value.set_title(label='Values ('+str(self._state_space) + ' states)')
-        
+        # plt.figure(figsize=(10, 6))
+        # self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
+        sub_sampling = 30
+        # last = int(self._greedySteps/sub_sampling)
+        values = np.array(self._value)[0:len(self._value):sub_sampling]
+        episodes = [e for e in range(0,self.n_episodes+1,sub_sampling)]
+        color =['blue','red']
+        actionState=[' not anchoring',' anchoring']
+        stateName = ['->|<- ','->|-> ','->|tip ','<-|<- ','<-|-> ','<-|tip ','base|<- ','base|-> ']
         for i in range(self._state_space):
-            self._fig_value.plot()
+            c = color[int(np.array(self._value)[-1,i,1])]#]*int((self.n_episodes+1)/sub_sampling)
+            a = actionState[int(np.array(self._value)[-1,i,1])]
+            # print(values[-1,i,:])
+            #print(int(values[values.shape[0]-1,i,1]))
+            self._fig_value.plot(episodes,values[:,i,0],'-o',label=stateName[i]+a)
+            # self._fig_value.plot(episodes[-last:],values[-last:,i,0],color=c)
+        self._fig_value.legend()
             
     
     def plot_av_value(self):
         if self._fig_av_value is None:
-            self._episodes = [e for e in range(self.n_episodes)]
             plt.figure()
             self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+        # plt.figure()
+        # self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+        episodes = [e for e in range(self.n_episodes+1)]
+        self._fig_av_value.plot(episodes,self._av_value)
 
     
     def plot_convergence(self):
-        if self._fig_convergencee is None:
-            self._episodes = [e for e in range(self.n_episodes)]
+        if self._fig_convergence is None:
             plt.figure()
-            self._fig_value = plt.subplot(xlabel='episode', ylabel='convergence')
-            
+            self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
+        # plt.figure()
+        # self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
+        episodes = [e for e in range(self.n_episodes)]
+        self._fig_convergence.plot(episodes,self._convergence)
 
    
