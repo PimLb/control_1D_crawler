@@ -1,29 +1,24 @@
+from globals import *
+
+import pygame
 import numpy as np
+
+
 np.seterr(invalid='ignore')
 import math
 import random
-
-import pygame
-import matplotlib.pyplot as plt
-
-#some optimization..
-from numba import jit
-
-
 #CODES TODO:
-# Think about optimizing ifs
+# Think about optimizing ifs 
+# EASY WAY: eliminate boundary conditions
 # Drop storage of some quantities, especially when getting to more complex situations (2d, multi-tentacle ecc)
 # --> nice: Avoid ifs by selecting a function at once (like overdamped or not, for instance)
 
 #IMPORTANT TO DO:
 # Plot action pulse against carrier to check if peak of pulse corresponds to peak of l0 (optimal friction).
 #Keep in mind we are discrete..
-#Could be nice to reduce omega accordingly whem more agents to impose fixed phase velocity.
+#Could be nice to reduce omega accordingly whem more agents to impose fixed phase velocity. PROBLEM: good delta t depends on omega
 # We could show higher the number of agents--> higher velocity because we approah the continuum limit?
 
-#TODO 
-# Insert finite friction in damped dynamics
-# Agent -->sucker, like this could be confusing when switching to single agent
 
 #OBSERVATION and HOT QUESTIOMS:
 #1. In a multiagent setting and with a simple Q matrix linked to elongation/compression states there's no way of getting paper vel (?) 
@@ -54,12 +49,6 @@ dt = 0.1
 
 #------------
 
-red = (220, 20, 60)
-blue = (30, 144, 255)
-green = (0,128,0)
-brown = (128,0,0)
-dark_violet = (199,21,133)
-violet = (219,112,147)
 
 
 minDistance = 0.5
@@ -179,8 +168,9 @@ class Agent(object):
         ####
         
         self._position = np.array(coordinate)
-        self._position_old = self._position
-
+        self._position_old = self._position.copy()
+        self._abslutePosition = self._position.copy() #Store positions without boundaries effect..
+        self._abslutePosition_old = self._position.copy()
         if self._position.size == self._box.dimensions:
             pass
         else:
@@ -227,7 +217,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
     '''
     # Info on space from box objec
     A = []
-    offset_x = box.boundary[0]/4 #box.boundary[0]/n_suckers
+    offset_x = box.boundary[0]/3 #box.boundary[0]/n_suckers
     # print("offset= ",offset_x, box.boundary[0]-offset_x)
     #fare in modo di avere None dove indice non esiste
     # old_position = offset_x
@@ -237,7 +227,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
         if box.dimensions == 1:
             for k in range(n_suckers):
                 # position = offset_x + k * x0 + amplitude * random.random()
-                position = old_position - l0(0,n_suckers-1-k) + 0.5*amplitude * random.random()
+                position = old_position - l0(0,n_suckers-1-k) + amplitude * random.uniform(-1,1)
                 #position = old_position + rest_position + amplitude * random.random()
                 old_position = position
                 A.append(Agent(box,[position]))
@@ -245,7 +235,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
         elif box.dimensions == 2:
             offset_y = box.boundary[1]/2
             for k in range(n_suckers):
-                position_x = offset_x + k * x0 + 0.5*amplitude * random.random()
+                position_x = offset_x + k * x0 + amplitude * random.uniform(-1,1)
                 #position_x = old_position + rest_position + amplitude * random.random()
                 #old_position = position_x
                 position_y = offset_y #+ k + dt * random.random()
@@ -304,14 +294,15 @@ class   Environment(object):
         self.deltaT = dt
         self.inv_DeltaT = 1./dt
         self._nsteps = 0
+        # self._episodeSteps = totalSteps
         self._episode = 1
         self._universe = {"agents":[],"target":[]}
         self._agents = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.append(np.array([t_position]))
         # if np.any([self._tposition[k]>=b for k,b in enumerate(self._box.boundary.values())]):
-        if np.any([self._tposition>=self._box.boundary]):
-            raise ValueError("Target out of simulation box!")
+        # if np.any([self._tposition>=self._box.boundary]):
+        #     raise ValueError("Target out of simulation box!")
         self._agents.extend(build_tentacle(n_suckers,box,self.l0)) #doing so self.universe mirrors the content
 
         
@@ -351,6 +342,7 @@ class   Environment(object):
         self._currentPlotTip = []
         self._figTip = None
         self._figCM = None
+        self._figVel = None
         self.window = None
         self.window_size = 800
         self.clock = None
@@ -416,6 +408,21 @@ class   Environment(object):
         if not self._isOverdamped:
             for sucker in self._agents:
                 sucker._acceleration_old = self._get_acceleration(sucker)
+        
+    def reset_partial(self):
+        #To reduce memory consumption for continuous problem
+        for s in self._agents:
+            del s
+
+        self._nsteps = 0
+        self._telapsed = self._telapsed[-100:]
+        self._episode += 1
+        self._tip_positions = self._tip_positions[-100:]
+        self._CM_position = self._CM_position[-100:]
+        self._vel =self._vel[-100:]
+
+        self.cumulatedReward = 0 #total reward per episode
+
     
     def l0(self,t:float,k:int) -> float:
         '''
@@ -458,12 +465,16 @@ class   Environment(object):
         #BASE
         states = []
         dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
+        if dright<0:
+            # print('here state',dright)
+            dright +=  self._box.boundary
+            # print(dright)
         right_tension = sign0(dright-self.l0(self._t,0))
         states.append((2,right_tension))
 
         #update old posiiton
-        self._agents[0]._position_old = self._agents[0].position
-
+        self._agents[0]._position_old = self._agents[0].position.copy()
+        self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
         #Intermediate suckers
         # for k in range(1,self._nsuckers-1):
         for sucker in self._agents[1:self._nsuckers-1]:
@@ -482,15 +493,19 @@ class   Environment(object):
             states.append((left_tension,right_tension))
 
             #update old posiitons
-            sucker._position_old = sucker.position
+            sucker._position_old = sucker.position.copy()
+            sucker._abslutePosition_old = sucker._abslutePosition.copy()
 
         #TIP
         dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
+        if dleft<0:
+            dleft += self._box.boundary
         left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1-1))
         states.append((left_tension,2))
 
         #update old posiiton
-        self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position
+        self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position.copy()
+        self._agents[self._nsuckers-1]._abslutePosition_old = self._agents[self._nsuckers-1]._abslutePosition.copy()
 
 
         if multiagent:
@@ -550,7 +565,7 @@ class   Environment(object):
         return self._agents[-1].position[0]
     
     def get_CM(self):
-        return np.average([a.position for a in self._agents])
+        return np.average([a._abslutePosition for a in self._agents])
         #return 0.5*(self._agents[0].position+self._agents[-1].position)
 
     def get_instVel(self):
@@ -639,19 +654,18 @@ class   Environment(object):
         else:
             reward = -1
         
-        self.cumulatedReward += reward #cumulated reward in the episode
-
         if touching[-1]:
             print(touching)
             terminal = True
-            #reward = self.cumulatedReward #per biasare ulteriormente learning tentacoli veloci quando esistono policies sub-ottimali simili. Stesseo risultato dovrebbe essere raggiungibile con molti steps
-            # reward = 1   #numrically instable to givr both rewards (velocity and touching)
-            
+            # reward = 0
+            # reward = (self._episodeSteps - self._nsteps) * self.get_averageVel()
+            # # reward = self.get_averageVel() * self._box.boundary[0]/self._phase_velocity
+            # self.cumulatedReward += reward
             #Could it be  different in single and muilti agent?
         
         
-        
-
+         #cumulated reward in the episode
+        self.cumulatedReward += reward
         return reward,terminal
 
     def _stepDamped(self,action):
@@ -669,12 +683,6 @@ class   Environment(object):
             sucker.lastAction = action[k]
             # print(sucker._velocity_old,sucker._acceleration_old)
             if action[k] ==1:
-                # print('here')
-                sucker.position = sucker._position_old
-                #sucker._acceleration_old = 0#-2*sucker._velocity_old/dt - sucker._acceleration_old #(for consistency)
-                # acceleration = self._get_acceleration(sucker) 
-                # sucker._velocity_old = -0.5*dt*acceleration#0
-                # sucker._acceleration_old = acceleration
                 sucker._velocity_old =0
                 sucker._acceleration_old =0
                 continue
@@ -682,8 +690,9 @@ class   Environment(object):
             else:
                 acceleration = self._get_acceleration(sucker) #acceleration on old positions
                 sucker._acceleration_old = acceleration
-                sucker.position =  sucker._position_old + self.deltaT*sucker._velocity_old +0.5*self.deltaT*self.deltaT* sucker._acceleration_old
-
+                delta_x = self.deltaT*sucker._velocity_old +0.5*self.deltaT*self.deltaT* sucker._acceleration_old
+                sucker.position =  sucker._position_old + delta_x
+                sucker._abslutePosition = sucker._abslutePosition_old + delta_x
                 
                 velocity = self._get_velocity(sucker,acceleration) #new velocity
                 
@@ -741,13 +750,19 @@ class   Environment(object):
         # print("here")
 
         if action[0] == 0:
-            pright = self._agents[0].rightNeighbor._position
-            dist = pright -self._agents[0].position
+            pright = self._agents[0].rightNeighbor._position_old
+            dist = pright -self._agents[0]._position_old
             if dist<0:
+                # old_dist = dist.copy()
                 dist += self._box.boundary
+                # print(old_dist,dist)
             inst_vel = (dist  - self.l0(self._t,0))
-            self._agents[0].position = self._agents[0]._position_old + self.deltaT * inst_vel
+            delta_x=self.deltaT * inst_vel
+            self._agents[0].position = self._agents[0]._position_old + delta_x
+            self._agents[0]._abslutePosition = self._agents[0]._abslutePosition_old + delta_x
         else:
+            # if (self._agents[0].rightNeighbor._position -self._agents[0].position)<0:
+            #     print("base active ", self._agents[0].position)
             pass
         self._agents[0].lastAction=action[0]
         #INTERMEDIATE
@@ -757,20 +772,32 @@ class   Environment(object):
             if action[k] == 1:  
                 pass #Do nothing.. position unchanged
             else:
-                pleft = sucker.leftNeighbor._position
-                pright = sucker.rightNeighbor._position
+                pleft = sucker.leftNeighbor._position_old.copy()
+                pright = sucker.rightNeighbor._position_old.copy()
+                me = sucker._position_old.copy()
+                # crossed=False
                 if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
+                    # print("here pl,me, pr",pleft,me,pright)
                     pright = pright + self._box.boundary
-                inst_vel = (pright + pleft-2*sucker.position + self.l0(self._t,k-1) - self.l0(self._t,k))
-                sucker.position = sucker._position_old + self.deltaT * inst_vel
+                    if (me-pleft)<0:
+                        me += self._box.boundary
+                    # print("here2 pr pl",pleft,me,pright)
+                    # print('to check memory copy..', sucker._position_old)
+                    # crossed = True
+                inst_vel = (pright + pleft-2*me + self.l0(self._t,k-1) - self.l0(self._t,k))
+                delta_x =  self.deltaT * inst_vel
+                sucker.position = sucker._position_old + delta_x
+                sucker._abslutePosition = sucker._abslutePosition_old + delta_x#here by setter method includes boundaries
         #TIP
         if action[self._nsuckers-1] == 0:
-            pleft = self._agents[self._nsuckers-1].leftNeighbor._position
-            dist = self._agents[self._nsuckers-1].position -pleft
+            pleft = self._agents[self._nsuckers-1].leftNeighbor._position_old
+            dist = self._agents[self._nsuckers-1]._position_old -pleft
             if dist<0:
                 dist+=self._box.boundary
             inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
-            self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + self.deltaT * inst_vel
+            delta_x = self.deltaT * inst_vel
+            self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + delta_x
+            self._agents[self._nsuckers-1]._abslutePosition = self._agents[self._nsuckers-1]._abslutePosition_old + delta_x
         else:
             pass
         self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
@@ -838,9 +865,26 @@ class   Environment(object):
         
         plt.ion()
         plt.show()
+    def plot_instVel(self):
+        return self._plot_instVel()
+    def _plot_instVel(self):
+        if self._figVel is None:
+            plt.figure()
+            print("initializing matplotlib plot")
+            self._figVel = plt.subplot(xlabel='time steps', ylabel='vel') #fig,ax
+            
+        
+        # self._figCM.cla()
+        # print(self._telapsed[:10],self._tip_positions[:10])
+        # for l in self._currentPlotCM:
+        #     l.remove()
+        self._figVel.set_title(label='instantaneous velocity, episode '+str(self._episode))
+        self._currentPlotVel=self._figVel.plot(self._telapsed[1:],self._vel,linewidth=2)
+        
+        plt.ion()
+        plt.show()
 
-
-    def get_policyView(self):
+    def get_anchoringPlot(self):
         #TODO
         '''This function represents the spatial behavior of the policy across the tentacle
             That is actions position instateonously
