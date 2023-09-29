@@ -3,11 +3,11 @@
 from globals import *
 import numpy as np
 
-max_lr = 0.3#learning rate
-min_lr = 0.05
+max_lr = 0.1# was 0.3 learning rate
+min_lr = 0.0025 # was 0.05 then 0.01
 gamma = 0.9#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.1
+min_epsilon =0.01
 
 
 
@@ -22,7 +22,7 @@ def make_binary(index:int):
     return [int(i) for i in bin(index)[2:]]
 
 class actionValue(object):
-    def __init__(self,learning_space:tuple,nAgents,total_episodes,collapse = True) -> None:
+    def __init__(self,learning_space:tuple,nAgents,total_episodes,hiveUpdate = True) -> None:
         self._state_space = learning_space[0]
         self._action_space = learning_space[1]
         self._nAgents = nAgents
@@ -30,7 +30,7 @@ class actionValue(object):
         self.lr = max_lr
         self.discount = gamma
 
-        scheduling_steps = total_episodes - int(total_episodes/4) #n_episodes
+        scheduling_steps = total_episodes - int(total_episodes/4) #total_episodes
         print("scheduling steps =", scheduling_steps)
         print("greedy steps =", total_episodes - scheduling_steps)
         self._greedySteps = total_episodes - scheduling_steps
@@ -45,46 +45,66 @@ class actionValue(object):
         # print(len(self.scheduled_epsilon))
         if nAgents>1:
             self._multiAgent = True
-            if collapse:
+            if hiveUpdate:
                 self._parallelUpdate = True
                 self.dim = learning_space
                 print("\n** HIVE UPDATE **\n")
                 self.update = self._update_Q_parallel
                 self.get_action = self._get_action_hiveUpdate
-                
+                Q = np.random.random(self.dim)
+                self._Q = Q
+                #convergence observables:
+                self._oldQ = self._Q.copy()  
+                self._convergence = []
+                #VALUE
+                # second index to contain correspondent policy. For 2 action space, 0 or 1 (= argmax) to be associated to color in plot
+                self._value = []
+                self._av_value = []
+                self.get_value = self._get_value_hive
+                self.get_av_value = self._get_av_value_hive
+                self._get_diff = self._get_diff_hive
+                self._value.append(self.get_value())
+                self._av_value.append(self.get_av_value())
+                #plots
+                self.plot_value = self._plot_value_hive
+                self.plot_convergence = self._plot_convergence_hive
+                self.plot_av_value = self._plot_av_value_hive
             else:
                 self._parallelUpdate = False
-                self.dim = learning_space + (nAgents,)
+                self.dim = learning_space 
                 self.update = self._update_Q_single
                 self.get_action = self._get_action_not_hiveUpdate
+                self._Q = []
+                print("\n** NOT hive update **\n")
+                print("A Q matrix per agent")
+                self._value =[]
+                self._av_value = []
+                self._oldQ =[]
+                for k in range(nAgents):
+                    Q = np.random.random(self.dim)#each agent has Q initialized differently
+                    self._Q.append(Q) 
+                    self._oldQ.append(Q)
+                self.get_value = self._get_value_noHive
+                self.get_av_value = self._get_av_value_noHive
+                self._get_diff = self._get_diff_noHive
+                self._value.append(self.get_value())
+                self._av_value.append(self.get_av_value())
+                #plots
+                self.plot_value = self._plot_value_noHive
+                self.plot_convergence = self._plot_convergence_noHive
+                self.plot_av_value = self._plot_av_value_noHive
+                
+
   
         else:
+            #TODO populate some learning observables..
             self._multiAgent = False
             self.get_action = self._get_action_singleAgent 
-            self.dim = learning_space
+            self.dim = learning_space #+ (nAgents,) not sure
         
 
 
-        Q = np.random.random(self.dim)#np.zeros(learning_space)
         
-        if not collapse and self._multiAgent:
-            self._Q = []
-            for k in range(nAgents):
-                self._Q.append(Q) 
-        else:
-            self._Q = Q
-
-
-        #convergence observables:
-        self._oldQ = self._Q.copy()
-        
-        self._convergence = []
-        #VALUE
-        # second index to contain correspondent policy. For 2 action space, 0 or 1 (= argmax) to be associated to color in plot
-        self._value = []
-        self._av_value = []
-        self._value.append(self.get_value())
-        self._av_value.append(np.mean(self.get_value()[:,0]))
         self._fig_value = None
         self._fig_av_value =None
         self._fig_convergence = None
@@ -118,7 +138,7 @@ class actionValue(object):
         have been defined
         '''
         for  k in range(0,self._nAgents):
-            s_new,_a_new = self._get_index(newstate[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
+            s_new,_a_new = self._get_index(newstate[k]) 
             s_old,a_old = self._get_index(oldstate[k],action[k])
             self._Q[s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old,a_old])
 
@@ -127,7 +147,7 @@ class actionValue(object):
     def _update_Q_single(self,newstate,oldstate,action,reward):
         #update each agent Q
         for  k in range(self._nAgents):
-            s_new,_a_new = self._get_index(newstate[k],action[k]) #CAREFUL HERE ACTION DOES NOT MATTER, IS A DUMMY NUMBER
+            s_new,_a_new = self._get_index(newstate[k]) 
             s_old,a_old = self._get_index(oldstate[k],action[k])
             self._Q[k][s_old,a_old] += self.lr* (reward + gamma * np.amax(self._Q[k][s_new]) - self._Q[k][s_old,a_old])
 
@@ -168,54 +188,15 @@ class actionValue(object):
 
             return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
     
-    # def get_action(self,s):
-        
-    #     if self._multiAgent:
-    #         new_action = []
-    #         if self._parallelUpdate:
-    #             #single Q funcion updated by each agent. 
-    #             #Fetching action for each agent looping through each agent state
-    #             for k in range(self._nAgents):
-    #                 # print(s[k])
-    #                 #SKIPPING THOSE
-    #                 # if(k==0 or k==self._nAgents-1):
-    #                 #     new_action.append(0)
-    #                 #     continue
-    #                 sind,_a = self._get_index(s[k])
-    #                 # print(s[k],sind)
-    #                 if np.random.random() < (1 - self.epsilon):
-    #                     # print("greedy")
-    #                     new_action.append(np.argmax(self._Q[sind]))
-    #                 else:
-    #                     new_action.append(np.random.randint(0,self._action_space))
-    #         else:
-    #             #one Q function for each agent
-    #             for k in range(self._nAgents):
-    #                 sind,_a = self._get_index(s[k])
-    #                 if np.random.random() < (1 - self.epsilon):
-    #                     new_action.append(np.argmax(self._Q[k][sind]))
-    #                 else:
-    #                     new_action.append(np.random.randint(0,  self._action_space))
-    #         return new_action
-    #     else:
-    #         #CHECK
-    #         if np.random.random() < (1 - self.epsilon):
-    #             sind,_a = self._get_index(s)
-    #             new_action=np.argmax(self._Q[sind])
-    #         else:
-    #             new_action=np.random.randint(0,  self._action_space)
-
-    #         return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
-
     def makeGreedy(self):
         self.lr = self.scheduled_lr[self.n_episodes]
         self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
         #UPDATE OBSERVABLES
         self._value.append(self.get_value())
-        self._av_value.append(np.mean(self.get_value()[:,0]))
-        self._convergence.append(np.amax(np.abs(self._Q -self._oldQ)))
-        self._oldQ = self._Q.copy()
+        self._av_value.append(self.get_av_value())
+        self._convergence.append(self._get_diff())
+        
         
     
     def get_onPolicy_action(self,s):
@@ -238,23 +219,44 @@ class actionValue(object):
         
 
             return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
+        
+    def _get_diff_hive(self):
+        diff = np.amax(np.abs(self._Q -self._oldQ))
+        self._oldQ = self._Q.copy()
+        return diff
     
-    
-    def get_value(self):
+    def _get_diff_noHive(self):
+        diff = []
+        for k in range(self._nAgents):
+            diff.append(np.amax(np.abs(self._Q[k] -self._oldQ[k])))
+            self._oldQ[k] = self._Q[k].copy()
+        return diff
+
+    def _get_value_hive(self):
         return np.vstack((np.amax(self._Q,axis=1),np.argmax(self._Q,axis=1))).T
+    def _get_av_value_hive(self):
+        return np.mean(self._get_value_hive()[:,0])
+    
+    def _get_value_noHive(self):
+        v = []
+        for k in range(self._nAgents):
+            v.append(np.vstack((np.amax(self._Q[k],axis=1),np.argmax(self._Q[k],axis=1))).T)
+        return v
+    def _get_av_value_noHive(self):
+        avV =[]
+        for k in range(self._nAgents):
+            avV.append(np.mean(np.amax(self._Q[k],axis=1)))
+        return avV
     
     def get_conv(self):
         return self._convergence[-1]
     
 
-    def plot_value(self):
-        if self._fig_value is None:
-            plt.figure(figsize=(10, 6))
-            self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
-            self._fig_value.set_title(label='Values ('+str(self._state_space) + ' states)')
-        # plt.figure(figsize=(10, 6))
-        # self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
-        sub_sampling = 30
+    def _plot_value_hive(self):
+        plt.figure(figsize=(10, 6))
+        self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
+        self._fig_value.set_title(label='Value ('+str(self._state_space) + ' states)')
+        sub_sampling = 10
         # last = int(self._greedySteps/sub_sampling)
         values = np.array(self._value)[0:len(self._value):sub_sampling]
         episodes = [e for e in range(0,self.n_episodes+1,sub_sampling)]
@@ -269,24 +271,69 @@ class actionValue(object):
             self._fig_value.plot(episodes,values[:,i,0],'-o',label=stateName[i]+a)
             # self._fig_value.plot(episodes[-last:],values[-last:,i,0],color=c)
         self._fig_value.legend()
-            
+        
+        for i in range(self._state_space):
+            plt.figure(figsize=(10, 6))
+            self._fig_value_action_all = plt.subplot(xlabel='episodes', ylabel='action')
+            self._fig_value_action_all.set_title(label='policy jumps for ' + stateName[i])
+            self._fig_value_action_all.plot(episodes,values[:,i,1],'-x')
+            # self._fig_value.plot(episodes[-last:],values[-last:,i,0],color=c)
+        
+    def _plot_value_noHive(self):
+        n = input("sucker (agent) number")
+        plt.figure(figsize=(10, 6))
+        self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
+        self._fig_value .set_title(label='Value ('+str(self._state_space) + ' states)' + 'sucker '+str(n))
+        sub_sampling = 10
+        episodes = [e for e in range(0,self.n_episodes+1,sub_sampling)]
+        # last = int(self._greedySteps/sub_sampling)
+
+        values = np.array(self._value[n])[0:len(self._value):sub_sampling]
+        
+        actionState=[' not anchoring',' anchoring']
+        stateName = ['->|<- ','->|-> ','->|tip ','<-|<- ','<-|-> ','<-|tip ','base|<- ','base|-> ']
+        for i in range(self._state_space):
+            a = actionState[int(np.array(self._value[n])[-1,i,1])]
+            self._fig_value.plot(episodes,values[:,i,0],'-o',label=stateName[i]+a)
+            # self._fig_value.plot(episodes[-last:],values[-last:,i,0],color=c)
+        self._fig_value.legend()     
+
+        for i in range(self._state_space):
+            plt.figure(figsize=(10, 6))
+            self._fig_value_action_all = plt.subplot(xlabel='episodes', ylabel='action')
+            self._fig_value_action_all.set_title(label='Sucker '+ str(n) +'. Policy jumps for ' + stateName[i])
+            self._fig_value_action_all.plot(episodes,values[:,i,1],'-x')
+
+
     
-    def plot_av_value(self):
-        if self._fig_av_value is None:
-            plt.figure()
-            self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
-        # plt.figure()
-        # self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+    def _plot_av_value_hive(self):
+        plt.figure()
+        self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+        self._fig_av_value.set_title(label='Average value')
         episodes = [e for e in range(self.n_episodes+1)]
         self._fig_av_value.plot(episodes,self._av_value)
 
+    def _plot_av_value_noHive(self):
+        n = input("sucker (agent) number")
+        plt.figure()
+        self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+        self._fig_av_value.set_title(label='Average value sucker '+str(n))
+        episodes = [e for e in range(self.n_episodes+1)]
+        self._fig_av_value.plot(episodes,self._av_value[n])
+
     
-    def plot_convergence(self):
-        if self._fig_convergence is None:
-            plt.figure()
-            self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
-        # plt.figure()
-        # self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
+    def _plot_convergence_hive(self):
+        plt.figure()
+        self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
+        self._fig_convergence.set_title(label='Global convergence Q function')
+        episodes = [e for e in range(self.n_episodes)]
+        self._fig_convergence.plot(episodes,self._convergence)
+    
+    def _plot_convergence_noHive(self):
+        n = input("sucker (agent) number")
+        plt.figure()
+        self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
+        self._fig_convergence.set_title(label='Global convergence Q function for sucker  '+str(n))
         episodes = [e for e in range(self.n_episodes)]
         self._fig_convergence.plot(episodes,self._convergence)
 
