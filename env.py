@@ -291,8 +291,7 @@ class   Environment(object):
         self._box = box
         
         self._t= 0
-        self.deltaT = dt
-        self.inv_DeltaT = 1./dt
+        
         self._nsteps = 0
         # self._episodeSteps = totalSteps
         self._episode = 1
@@ -315,17 +314,24 @@ class   Environment(object):
         if self._isOverdamped:
             print("OVERDAMPED DYNAMICS")
             self.step=self._stepOverdamped
+            self._deltaT = dt
+            print("delta t =", self.deltaT)
         else:
             print("NON OVERDAMPED:")
-            print("delta t = ",self.deltaT)
             print("m/zeta = ",mass/zeta)
             for sucker in self._agents:
                 sucker._acceleration_old = self._get_acceleration(sucker)
             self.step = self._stepDamped
+            # self.deltaT = dt/2.
+            self._deltaT = dt
+            print("delta t =", self.deltaT)
 
         if self._box.dimensions == 2:
             raise NameError ("2D dynamics not implemented yet")
             
+
+        
+        self.inv_DeltaT = 1./self.deltaT
 
         self._tip_positions= []
         self._CM_position = []
@@ -366,14 +372,20 @@ class   Environment(object):
             self.step=self._stepOverdamped
         else:
             self.step=self._stepDamped
-
+    @property
+    def deltaT(self):
+        return self._deltaT
+    @deltaT.setter
+    def deltaT(self,deltaT):
+        self._deltaT=deltaT
+        self.inv_DeltaT = 1./self.deltaT
     @property
     def omega(self):
         return self._omega
     @omega.setter
     def omega(self,omega):
         self._omega = omega
-        self._phase_velocity = omega*self._nsuckers*self.carrierMode/2*math.pi
+        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude
         print("phase velocity carrier pulse = ", self._phase_velocity)
 
     def reset(self,exploringStarts = False,fps = FPS):
@@ -442,7 +454,7 @@ class   Environment(object):
             4 out of eigth can be realized only by tip and base for the definitions given.
         '''
          #returns the state of the sistem and can be framed single agent or multiagent
-        multiagent = self.isMultiagent
+        # multiagent = self.isMultiagent
 
         #EFFICIENCY CONSIDERATIONS:
         # Since the tentacle is an ordered list there's no need to store pointer to neighbor TODO
@@ -508,22 +520,22 @@ class   Environment(object):
         self._agents[self._nsuckers-1]._abslutePosition_old = self._agents[self._nsuckers-1]._abslutePosition.copy()
 
 
-        if multiagent:
+        # if multiagent:
             # if not humanR:
-            return states
+        return states
             # else:
             #     return [ ( "elongated" if s[0]==1 else "compressed" , "elongated" if s[1] ==1 else "compressed") for s in states]
-        else:
-            S =[]
-            #CHECK/THINK MORE
-            # [s_agent_i sagent_j ] S = 2^nagents :  S = s[agent][left_tension/right_tension]s[diffagent][left/right]
-            for i in range(self._nagents):
-                for j in  range(i+1,self._nagents):
-                    i_rev= self._nagents - (i+1)
-                    j_rev = self._nagents -(j+1)
-                    (states[i_rev][0]*states[j_rev][0])+S
-                    S.append(states[i][1]*states[j][1])
-            return S
+        # else:
+        #     S =[]
+        #     #CHECK/THINK MORE
+        #     # [s_agent_i sagent_j ] S = 2^nagents :  S = s[agent][left_tension/right_tension]s[diffagent][left/right]
+        #     for i in range(self._nagents):
+        #         for j in  range(i+1,self._nagents):
+        #             i_rev= self._nagents - (i+1)
+        #             j_rev = self._nagents -(j+1)
+        #             (states[i_rev][0]*states[j_rev][0])+S
+        #             S.append(states[i][1]*states[j][1])
+        #     return S
         
     def get_humandR_state(self):
         state = self.get_state()
@@ -623,8 +635,6 @@ class   Environment(object):
         '''
         Computes reward and checks terminal condition 
         '''
-
-        #phase_velocity = omega*2*math.pi*self.carrierFraction/(self._n_agents)
         #velocity = 0.5/dt*(self._CM_position[-1] - self._CM_position[-2])#need several orders to be distinguishible from advancement
         # velocity2 = 1./6(self._CM_position[-1] + self._CM_position[-2] -self._CM_position[-3] - self._CM_position[-4])
         # velocityn = sum(self._CM_position[-int(len(self._CM_position)/2):]) - sum(self._CM_position[:int(len(self._CM_position)/2)])
@@ -884,20 +894,7 @@ class   Environment(object):
         plt.ion()
         plt.show()
 
-    def get_anchoringPlot(self):
-        #TODO
-        '''This function represents the spatial behavior of the policy across the tentacle
-            That is actions position instateonously
-        '''
-        if self._figPolicy is None:
-            plt.figure()
-            print("initializing matplotlib plot")
-            self._figPolicy = plt.subplot(xlabel='time steps', ylabel='Friction',
-            title=''+str(self._episode))
-
-
-        return
-        
+    # 
 
     def render(self,special_message = None):
         
@@ -1038,5 +1035,95 @@ class   Environment(object):
     #                 np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
     #             )
 
+    # def get_optimalAction(self):
+    #     #OBS: still dependency on binning. I have to pick closer bin
+    #     self.l0(self._t,k)
+    # def optimalStep(self):
+    #     action = get_optimalAction()
 
-    
+
+
+
+    #   def get_anchoringPlot(self):
+    #     #TODO
+    #     '''This function represents the spatial behavior of the policy across the tentacle
+    #         That is actions position instateonously
+    #     '''
+    #     if self._figPolicy is None:
+    #         plt.figure()
+    #         print("initializing matplotlib plot")
+    #         self._figPolicy = plt.subplot(xlabel='time steps', ylabel='Friction',
+    #         title=''+str(self._episode))
+
+
+    #     return
+
+# TODO PLOTTA TENTACOLO NELLO STESSO GRAFICO
+def u0_cont(t:float,s:float,N:int,omega,optimalShift,carrierMode=1) -> float:
+        '''
+        N = number of suckers
+        '''
+        # the k dependent term mimics some time delay in the propagation 
+        wavelengthFraction = carrierMode
+        # print (wavelengthFraction)
+        k = 2*math.pi*wavelengthFraction/(N) #N*x0 but aslo is s*x0 so they simplify out
+        diffusion = elastic_constant/zeta
+        # alpha = math.atan(omega*x0*x0/(diffusion*k*k))
+        alpha=0 #appears also in equation for  pulse
+        # print(alpha)
+        return np.cos(omega*t - k*s +alpha - optimalShift)
+
+def plot_Optimalpulse(t,N_suckers,omega):
+    # fig.clear()
+    tlength = N_suckers -1#[0-->8]
+    s = np.arange(0,tlength,0.001)
+    l = u0_cont(t,s,N_suckers,omega,optimalShift=np.pi/2)
+    target = 1.
+    # fig.plot(s,l)
+    plot = s,l
+    # pulse = np.where(abs(l-(amplitude+x0))<=0.001)
+    pulse = np.where(abs(l-target)<=0.00005)
+    # print(pulse[0])
+    try:
+        p = pulse[0][0]
+    except:
+        p=-1
+        pulse=-1
+
+    # if pulse[0].size>0:
+    # sucker = np.rint(s[pulse][0])#closer one
+    sucker = np.rint(s[p])#closer one
+    # print(sucker)
+    # fig.plot(s[pulse],l[pulse],'o')
+    plot_peak = s[pulse],l[pulse]
+    plot_peak2= s[p],l[p]
+    return int(sucker),plot,plot_peak,plot_peak2
+    # else:
+    #     plot_peak=s[-1],l[-1]
+    #     print(l)
+        # return -1,plot,plot_peak
+def plot_Optimalpulse2(t,N_suckers,omega):
+    # fig.clear()
+    tlength = N_suckers -1#[0-->8]
+    s = np.arange(0,tlength,0.05)
+    l = u0_cont(t,s,N_suckers,omega,optimalShift=0)
+    target = 0
+    # fig.plot(s,l)
+    plot = s,l
+    # pulse = np.where(abs(l-(amplitude+x0))<=0.001)
+    pulse = np.where(abs(l-target)<=0.001)
+    # print(pulse[0])
+    try:
+        p = pulse[0][-1]
+    except:
+        p=-1
+        pulse=-1
+
+    # if pulse[0].size>0:
+    # sucker = np.rint(s[pulse][0])#closer one
+    sucker = np.rint(s[p])#closer one
+    # print(sucker)
+    # fig.plot(s[pulse],l[pulse],'o')
+    plot_peak = s[pulse],l[pulse]
+    plot_peak2= s[p],l[p]
+    return int(sucker),plot,plot_peak,plot_peak2
