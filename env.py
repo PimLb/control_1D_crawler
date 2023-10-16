@@ -213,6 +213,7 @@ class Agent(object):
             
 
 def build_tentacle(n_suckers,box,l0, exploringStarts = False):
+    #NOW CREATES VIRTUAL AGENT/SUCKER AT THE RIGHT OF THE TIP, WHICH IS A REPLICA OF THE BASE
     '''
     build tentacle with some randomicity
     '''
@@ -266,11 +267,11 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
         else:
             raise ReferenceError("Simulation box badly or not initialized ?")
     #Point to neighbors
-    A[0].assignPointer(0,left=A[n_suckers-1],right = A[1],infoText = "I'm the base") #base sees the tip at its left
-    A[n_suckers-1].assignPointer(n_suckers-1,left = A[n_suckers-2],right = A[0],infoText = "I'm the tip") #tip sees the base at his rigth
+    A[0].assignPointer(0,left=A[n_suckers-2],right = A[1],infoText = "I'm the base") #base is like the tip at its left
+    # A[n_suckers].assignPointer(n_suckers,left = A[n_suckers-1],right = A[1],infoText = "virtual sucker") #REPLICA of the base
     for k in range(1,n_suckers-1):
         A[k].assignPointer(k,left= A[k-1],right=A[k+1],infoText = "I'm intermediate sucker n " + str(k)) 
-    
+    A[n_suckers-1].assignPointer(n_suckers-1,left = A[n_suckers-2],right = A[1],infoText = "I'm the tip")
     return A
 
 
@@ -396,7 +397,7 @@ class   Environment(object):
         self._omega = omega
         alpha = math.atan(self._omega*self._nsuckers**2/(2*np.pi))
         self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude * math.cos(alpha)
-        print("Optmsl analitical velocity OVERDAMPED= ", self._phase_velocity)
+        print("Optimal analitical velocity OVERDAMPED= ", self._phase_velocity)
 
     def reset(self,exploringStarts = False,fps = FPS):
 
@@ -518,7 +519,9 @@ class   Environment(object):
             #update old posiitons
             sucker._position_old = sucker.position.copy()
             sucker._abslutePosition_old = sucker._abslutePosition.copy()
-
+        # #for the evolution of the virtual sucker
+        # self._agents[self._nsuckers]._position_old = self._agents[self._nsuckers].position.copy()
+        
         # #TIP
         # dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
         # if dleft<0:
@@ -742,33 +745,8 @@ class   Environment(object):
         #IMPORTANT: Consider that any update on .position, enforces automatically boundary conditions
         '''
 
-            # #BASE
-            #     if action[0] == 0:
-            #         self._agents[0].position = self._agents[0].rightNeighbor._position - self.l0(self._t,0)
-            #     else:
-            #         pass
-            #     self._agents[0].lastAction=action[0]
-            #     for sucker in self._agents[1:self._nsuckers-1]:
-            #         k = sucker._id
-            #         # print(k)
-            #         if action[k] == 1:  
-            #             pass #Do nothing.. position unchanged
-            #         elif action[k] == 0:
-            #             pleft = sucker.leftNeighbor._position
-            #             pright = sucker.rightNeighbor._position
-            #             if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
-            #                 pright = pright + self._box.boundary
-            #             sucker.position = 0.5*(pright + pleft + self.l0(self._t,k-1) - self.l0(self._t,k))
-            #         sucker.lastAction = action[k]
-            #     #TIP 
-            #     if action[self._nsuckers-1] == 0:
-            #         self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1].leftNeighbor._position +self.l0(self._t,self._nsuckers-1-1)
-            #     else:
-            #         pass
-            #     self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
-                #Syncronous overdamped
-                #BASE
-        # print("here")
+        #INFINITE TENTACLE
+            # the base and the tip are the same sucker
 
         # if action[0] == 0:
         #     pright = self._agents[0].rightNeighbor._position_old
@@ -786,8 +764,33 @@ class   Environment(object):
         #     #     print("base active ", self._agents[0].position)
         #     pass
         # self._agents[0].lastAction=action[0]
+        #BOUNDARIES
+
+        pright = self._agents[0].rightNeighbor._position_old
+        dist = pright -self._agents[0]._position_old
+        if dist<0:
+            # old_dist = dist.copy()
+            dist += self._box.boundary
+        right_force = (dist  - self.l0(self._t,0))
+        pleft = self._agents[self._nsuckers-1].leftNeighbor._position_old #virtual
+        dist = self._agents[self._nsuckers-1]._position_old -pleft
+        if dist<0:
+            dist+=self._box.boundary
+        left_force = -(dist - self.l0(self._t,self._nsuckers-2))
+        inst_vel_boundary = right_force + left_force
+        delta_x=self.deltaT * inst_vel_boundary
+        if action[0] == 0 :#and action[self._nsuckers-1]==0:
+            #virtual sucker-base evolves feeling same forces of base
+            self._agents[0].position = self._agents[0]._position_old + delta_x
+        if action[self._nsuckers-1]==0:
+            self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + delta_x
+        
+        self._agents[0].lastAction = action[0]
+        self._agents[self._nsuckers-1].lastAction = action[self._nsuckers-1]
+        # self._agents[self._nsuckers-1].lastAction = action[self._nsuckers-1]
+        # self._agents[0].lastAction = self._agents[self._nsuckers-1].lastAction
         #INTERMEDIATE
-        for sucker in self._agents[0:self._nsuckers]:
+        for sucker in self._agents[1:self._nsuckers-1]:
             k = sucker._id
             sucker.lastAction = action[k]
             if action[k] == 1:  
@@ -798,10 +801,14 @@ class   Environment(object):
                 me = sucker._position_old.copy()
                 # crossed=False
                 if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
+                    # print(sucker.info)
                     # print("here pl,me, pr",pleft,me,pright)
                     pright = pright + self._box.boundary
+                    # print("here pl,me, pr",pleft,me,pright)
                     if (me-pleft)<0:
                         me += self._box.boundary
+                        # print("here pl,me, pr",pleft,me,pright)
+                        # print('me-pleft: ',me-pleft)
                     # print("here2 pr pl",pleft,me,pright)
                     # print('to check memory copy..', sucker._position_old)
                     # crossed = True
@@ -965,15 +972,20 @@ class   Environment(object):
 #         # loop on all suckers
             n = 0
             nagents = self._nagents
+            
             for agent in self._agents:
                 n +=1
                 a = agent.position
+                
                 if agent.lastAction == 0:
                     color = violet
                 else:
                     color = blue
+                # if agent.info == "virtual sucker":
+                #     color ='gray'
                 try:
-                    a[1]
+                    print(a[1])
+                    print("here2D")
                     pygame.draw.circle(
                     canvas,
                     (0, 0, 255),
@@ -1009,30 +1021,38 @@ class   Environment(object):
                     )
                     if agent.rightNeighbor is not None:
                         # print(agent.rightNeighbor.position)
-                        if (agent.rightNeighbor.position[0] * self.pix_square_size) < a[0]:
-                            pass
-                        else:
-                            # print(n-1)
-                            #plot rest position of spring
-                            pygame.draw.circle(
-                                canvas,
-                                red,
-                                l,
-                                self.pix_square_size/3,
-                            )
+                        
                     
                             right = np.array([agent.rightNeighbor.position[0],yrepr])* self.pix_square_size
                             lenght = math.ceil((right - a)[0])
                             # pygame.draw.line(canvas,0,a,right)
                             size = self.pix_square_size/2 *(1-n/nagents) + self.pix_square_size/5
-                            pygame.draw.rect(
-                                canvas,
-                                dark_violet,
-                                pygame.Rect(
-                                a[0],a[1]-size,
-                                lenght,size
-                            )
-                            )
+                            if agent.info == "I'm the tip":
+                                pass
+                            else:
+                                if (agent.rightNeighbor.position[0] * self.pix_square_size) < a[0]:
+                                    pass
+                                else:
+                                    # print(n-1)
+                                    #plot rest position of spring
+                                    if agent.info == "I'm the base":
+                                        c = 'black'
+                                    else:
+                                        c = 'red'
+                                    pygame.draw.circle(
+                                        canvas,
+                                        c,
+                                        l,
+                                        self.pix_square_size/3,
+                                    )
+                                pygame.draw.rect(
+                                    canvas,
+                                    dark_violet,
+                                    pygame.Rect(
+                                    a[0],a[1]-size,
+                                    lenght,size
+                                )
+                                )
 
         self.window.blit(canvas, canvas.get_rect())
         pygame.event.pump()
