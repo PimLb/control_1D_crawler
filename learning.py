@@ -15,6 +15,8 @@ max_epsilon = 0.9
 min_epsilon =0.01
 
 stateName =['->|<- ','->|-> ','->|tip ','<-|<- ','<-|-> ','<-|tip ','base|<- ','base|-> ']
+stateMap_boundaries = {('base',0):'base|<- ',('base',1):'base|->' ,(0,'tip'):'->|tip ',(1,'tip'):'<-|tip '}
+stateMap_intermediate = {(0,0):'->|<- ',(0,1):'->|-> ',(1,0):'<-|<- ',(1,1):'<-|-> '}
 actionState=[' not anchoring',' anchoring']
 
 def interpret_binary(s:tuple):
@@ -31,6 +33,7 @@ class actionValue(object):
     def __init__(self,learning_space:tuple,nAgents,total_episodes,hiveUpdate = True) -> None:
         self._state_space = learning_space[0]
         self._action_space = learning_space[1]
+        self.dim = (len(self._state_space),len(self._action_space))
         self._nAgents = nAgents
         self.epsilon = max_epsilon
         self.lr = max_lr
@@ -53,14 +56,13 @@ class actionValue(object):
             self._multiAgent = True
             if hiveUpdate:
                 self._parallelUpdate = True
-                self.dim = learning_space
                 print("\n** HIVE UPDATE **\n")
                 self.update = self._update_Q_parallel
                 self.get_action = self._get_action_hiveUpdate
                 Q={}
                 #k could be whatsover even directly the tuple of states
                 #   --> Can drop the interpreter but need a function producing all possible states
-                for k in range(self.dim[0]):
+                for k in self._state_space.items():
                     Q[k] = np.random.random(self.dim[1])
                 # Q = np.random.random(self.dim)
                 self._Q = Q
@@ -95,28 +97,31 @@ class actionValue(object):
                 self._convergence = []
                 
                 #BASE
-                Q={}
-                Q[6] = np.random.random(self.dim[1])
-                Q[7] = np.random.random(self.dim[1])
+                # Q={}
+                # Q[self._state_space[4]] = np.random.random(self.dim[1])
+                # Q[self._state_space[5]] = np.random.random(self.dim[1])
                 
-                self._Q.append(copy.deepcopy(Q)) 
-                self._oldQ.append(copy.deepcopy(Q))
+                # self._Q.append(copy.deepcopy(Q)) 
+                # self._oldQ.append(copy.deepcopy(Q))
                 Q={}
                 #INTERMEDIATE ONES
-                Q[0] = np.random.random(self.dim[1])
-                Q[1] = np.random.random(self.dim[1])
-                Q[3] = np.random.random(self.dim[1])
-                Q[4] = np.random.random(self.dim[1])
-                for k in range(1,self._nAgents-1):
+                # Q[0] = np.random.random(self.dim[1])
+                # Q[1] = np.random.random(self.dim[1])
+                # Q[3] = np.random.random(self.dim[1])
+                # Q[4] = np.random.random(self.dim[1])
+                internal_states = stateMap_intermediate.items()
+                for k in internal_states:
+                    Q[k] = np.random.random(self.dim[1])
+                for i in range(0,self._nAgents):
                     self._Q.append(copy.deepcopy(Q)) 
                     self._oldQ.append(copy.deepcopy(Q))
                 # Q = np.zeros(self.dim)
                 #TIP
-                Q={}
-                Q[2] = np.random.random(self.dim[1])
-                Q[5] = np.random.random(self.dim[1])
-                self._Q.append(copy.deepcopy(Q)) 
-                self._oldQ.append(copy.deepcopy(Q))
+                # Q={}
+                # Q[self._state_space[6]] = np.random.random(self.dim[1])
+                # Q[self._state_space[7]] = np.random.random(self.dim[1])
+                # self._Q.append(copy.deepcopy(Q)) 
+                # self._oldQ.append(copy.deepcopy(Q))
                 self.get_value = self._get_value_noHive
                 self.get_av_value = self._get_av_value_noHive
                 self._get_diff = self._get_diff_noHive
@@ -270,7 +275,7 @@ class actionValue(object):
     def _get_value_hive(self):
         value = {}
         for k in self._Q:
-            value[stateName[k]]=(np.amax(self._Q[k]),np.argmax(self._Q[k]))
+            value[k]=(np.amax(self._Q[k]),np.argmax(self._Q[k]))
         return value
         #return np.vstack((np.amax(self._Q,axis=1),np.argmax(self._Q,axis=1))).T
 
@@ -287,7 +292,7 @@ class actionValue(object):
             value = {}
             Q = self._Q[i]
             for k in Q:
-                value[stateName[k]]=(np.amax(Q[k]),np.argmax(Q[k]))
+                value[k]=(np.amax(Q[k]),np.argmax(Q[k]))
             v.append(value)
         return v
     def _get_av_value_noHive(self):
