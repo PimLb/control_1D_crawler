@@ -1,12 +1,12 @@
 from globals import *
 
-import pygame
-import numpy as np
+# import pygame
+# import numpy as np
 
 
 np.seterr(invalid='ignore')
-import math
-import random
+# import math
+# import random
 #CODES TODO:
 # Think about optimizing ifs 
 # EASY WAY: eliminate boundary conditions
@@ -41,6 +41,7 @@ elastic_constant = 1
 mass = 10 # mass < 0,1 overdamped limit
 
 
+
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
 dt = 0.1
@@ -53,7 +54,7 @@ dt = 0.1
 
 minDistance = 0.5
 
-x0=2.5
+x0 = 2.5
 amplitude = 0.5
 
 
@@ -167,7 +168,7 @@ class Agent(object):
         self._acceleration_old = None
         ####
         
-        self._position = np.array(coordinate)
+        self.position = np.array(coordinate)
         self._position_old = self._position.copy()
         self._abslutePosition = self._position.copy() #Store positions without boundaries effect..
         self._abslutePosition_old = self._position.copy()
@@ -217,7 +218,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
     '''
     # Info on space from box objec
     A = []
-    offset_x = box.boundary[0]/3 #box.boundary[0]/n_suckers
+    offset_x = box.boundary[0]/5 #box.boundary[0]/n_suckers
     # print("offset= ",offset_x, box.boundary[0]-offset_x)
     #fare in modo di avere None dove indice non esiste
     # old_position = offset_x
@@ -278,7 +279,12 @@ class   Environment(object):
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
-        
+        tentacle_length = 30
+        global x0 
+        global amplitude
+        x0 = tentacle_length/n_suckers
+        amplitude = x0/10.
+        print(x0,amplitude)
         self.isMultiagent = is_multiagent
         self._isOverdamped = isOverdamped
 
@@ -385,8 +391,9 @@ class   Environment(object):
     @omega.setter
     def omega(self,omega):
         self._omega = omega
-        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude
-        print("phase velocity carrier pulse = ", self._phase_velocity)
+        alpha = math.atan(self._omega*self._nsuckers**2/(2*np.pi))
+        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude * math.cos(alpha)
+        print("Optmsl analitical velocity OVERDAMPED= ", self._phase_velocity)
 
     def reset(self,exploringStarts = False,fps = FPS):
 
@@ -444,6 +451,7 @@ class   Environment(object):
         wavelengthFraction = self.carrierMode
         N = self._nsuckers
         # print (wavelengthFraction)
+        # print(x0,amplitude)
         return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * k)
     
     
@@ -1044,86 +1052,4 @@ class   Environment(object):
 
 
 
-    #   def get_anchoringPlot(self):
-    #     #TODO
-    #     '''This function represents the spatial behavior of the policy across the tentacle
-    #         That is actions position instateonously
-    #     '''
-    #     if self._figPolicy is None:
-    #         plt.figure()
-    #         print("initializing matplotlib plot")
-    #         self._figPolicy = plt.subplot(xlabel='time steps', ylabel='Friction',
-    #         title=''+str(self._episode))
-
-
-    #     return
-
-# TODO PLOTTA TENTACOLO NELLO STESSO GRAFICO
-def u0_cont(t:float,s:float,N:int,omega,optimalShift,carrierMode=1) -> float:
-        '''
-        N = number of suckers
-        '''
-        # the k dependent term mimics some time delay in the propagation 
-        wavelengthFraction = carrierMode
-        # print (wavelengthFraction)
-        k = 2*math.pi*wavelengthFraction/(N) #N*x0 but aslo is s*x0 so they simplify out
-        diffusion = elastic_constant/zeta
-        # alpha = math.atan(omega*x0*x0/(diffusion*k*k))
-        alpha=0 #appears also in equation for  pulse
-        # print(alpha)
-        return np.cos(omega*t - k*s +alpha - optimalShift)
-
-def plot_Optimalpulse(t,N_suckers,omega):
-    # fig.clear()
-    tlength = N_suckers -1#[0-->8]
-    s = np.arange(0,tlength,0.001)
-    l = u0_cont(t,s,N_suckers,omega,optimalShift=np.pi/2)
-    target = 1.
-    # fig.plot(s,l)
-    plot = s,l
-    # pulse = np.where(abs(l-(amplitude+x0))<=0.001)
-    pulse = np.where(abs(l-target)<=0.00005)
-    # print(pulse[0])
-    try:
-        p = pulse[0][0]
-    except:
-        p=-1
-        pulse=-1
-
-    # if pulse[0].size>0:
-    # sucker = np.rint(s[pulse][0])#closer one
-    sucker = np.rint(s[p])#closer one
-    # print(sucker)
-    # fig.plot(s[pulse],l[pulse],'o')
-    plot_peak = s[pulse],l[pulse]
-    plot_peak2= s[p],l[p]
-    return int(sucker),plot,plot_peak,plot_peak2
-    # else:
-    #     plot_peak=s[-1],l[-1]
-    #     print(l)
-        # return -1,plot,plot_peak
-def plot_Optimalpulse2(t,N_suckers,omega):
-    # fig.clear()
-    tlength = N_suckers -1#[0-->8]
-    s = np.arange(0,tlength,0.05)
-    l = u0_cont(t,s,N_suckers,omega,optimalShift=0)
-    target = 0
-    # fig.plot(s,l)
-    plot = s,l
-    # pulse = np.where(abs(l-(amplitude+x0))<=0.001)
-    pulse = np.where(abs(l-target)<=0.001)
-    # print(pulse[0])
-    try:
-        p = pulse[0][-1]
-    except:
-        p=-1
-        pulse=-1
-
-    # if pulse[0].size>0:
-    # sucker = np.rint(s[pulse][0])#closer one
-    sucker = np.rint(s[p])#closer one
-    # print(sucker)
-    # fig.plot(s[pulse],l[pulse],'o')
-    plot_peak = s[pulse],l[pulse]
-    plot_peak2= s[p],l[p]
-    return int(sucker),plot,plot_peak,plot_peak2
+   
