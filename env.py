@@ -66,7 +66,7 @@ FPS = 20
 
 def sign0(x)->int:
     '''
-    Returns 0 for negative, 1 for positive
+    Returns 0 for negative = compressed, 1 for positive = expanded
     CAREFUL 0 tension is given state 1. Like this state space is 2 dimensional
     '''
     # print(x)
@@ -266,12 +266,12 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
         else:
             raise ReferenceError("Simulation box badly or not initialized ?")
     #Point to neighbors
-    A[0].assignPointer(0,right = A[1],infoText = "I'm the base")
-    A[n_suckers-1].assignPointer(n_suckers-1,left = A[n_suckers-2],infoText = "I'm the tip")
+    A[0].assignPointer(0,left=A[n_suckers-1],right = A[1],infoText = "I'm the base") #base sees the tip at its left
+    A[n_suckers-1].assignPointer(n_suckers-1,left = A[n_suckers-2],right = A[0],infoText = "I'm the tip") #tip sees the base at his rigth
     for k in range(1,n_suckers-1):
-        A[k].assignPointer(k,left= A[k-1],right=A[k+1],infoText = "I'm intermediate sucker n " + str(k))
+        A[k].assignPointer(k,left= A[k-1],right=A[k+1],infoText = "I'm intermediate sucker n " + str(k)) 
+    
     return A
-
 
 
 class   Environment(object):
@@ -362,9 +362,12 @@ class   Environment(object):
         
 
         if is_multiagent == True:
-            self.action_space = 2 # sucker can turn on friction or turn it off
-            self.state_space = 8#4
+            self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
+            self.action_space_dim = 2
+            self.state_space = {(0,0):'->|<- ',(0,1):'->|-> ',(1,0):'<-|<- ',(1,1):'<-|-> '}#,'base|<- ','base|->' ,'->|tip ','<-|tip ']#4 internal + 2 tip + 2 base
+            self.state_space_dim = 4
         else:
+            #OBSOLETE
             self.action_space = np.power(2,n_suckers)
             self.state_space = np.power(8,n_suckers)# np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
 
@@ -484,20 +487,20 @@ class   Environment(object):
 
         #BASE
         states = []
-        dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
-        if dright<0:
-            # print('here state',dright)
-            dright +=  self._box.boundary
-            # print(dright)
-        right_tension = sign0(dright-self.l0(self._t,0))
-        states.append((2,right_tension))
+        # dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
+        # if dright<0:
+        #     # print('here state',dright)
+        #     dright +=  self._box.boundary
+        #     # print(dright)
+        # right_tension = sign0(dright-self.l0(self._t,0))
+        # states.append(('base',right_tension))
 
-        #update old posiiton
-        self._agents[0]._position_old = self._agents[0].position.copy()
-        self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
+        # #update old posiiton
+        # self._agents[0]._position_old = self._agents[0].position.copy()
+        # self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
         #Intermediate suckers
         # for k in range(1,self._nsuckers-1):
-        for sucker in self._agents[1:self._nsuckers-1]:
+        for sucker in self._agents[0:self._nsuckers]:
             #more compact boundary enforcing
             k = sucker._id
             pright = sucker.rightNeighbor.position
@@ -510,22 +513,22 @@ class   Environment(object):
             if dleft<0:
                 dleft += self._box.boundary
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
-            states.append((left_tension,right_tension))
+            states.append(self.state_space[(left_tension,right_tension)])
 
             #update old posiitons
             sucker._position_old = sucker.position.copy()
             sucker._abslutePosition_old = sucker._abslutePosition.copy()
 
-        #TIP
-        dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
-        if dleft<0:
-            dleft += self._box.boundary
-        left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1-1))
-        states.append((left_tension,2))
+        # #TIP
+        # dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
+        # if dleft<0:
+        #     dleft += self._box.boundary
+        # left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1-1))
+        # states.append((left_tension,'tip'))
 
-        #update old posiiton
-        self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position.copy()
-        self._agents[self._nsuckers-1]._abslutePosition_old = self._agents[self._nsuckers-1]._abslutePosition.copy()
+        # #update old posiiton
+        # self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position.copy()
+        # self._agents[self._nsuckers-1]._abslutePosition_old = self._agents[self._nsuckers-1]._abslutePosition.copy()
 
 
         # if multiagent:
@@ -545,21 +548,21 @@ class   Environment(object):
         #             S.append(states[i][1]*states[j][1])
         #     return S
         
-    def get_humandR_state(self):
-        state = self.get_state()
-        return [ ( "elongated" if s[0]==1 else "compressed" if s[0]==0 else "base" , "elongated" if s[1] ==1 else "compressed" if s[1]==0 else "tip") for s in state]
+    # def get_humandR_state(self):
+    #     state = self.get_state()
+    #     return [ ( "elongated" if s[0]==1 else "compressed" if s[0]==0 else "base" , "elongated" if s[1] ==1 else "compressed" if s[1]==0 else "tip") for s in state]
 
     def get_stateDebug(self):
         #BASE
         states = []
-        dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
-        right_tension = dright-self.l0(self._t,0)
-        states.append((2,right_tension))
+        # dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
+        # right_tension = dright-self.l0(self._t,0)
+        # states.append((2,right_tension))
 
 
         #Intermediate suckers
         # for k in range(1,self._nsuckers-1):
-        for sucker in self._agents[1:self._nsuckers-1]:
+        for sucker in self._agents[0:self._nsuckers]:
             #more compact boundary enforcing
             k = sucker._id
             pright = sucker.rightNeighbor.position
@@ -575,9 +578,9 @@ class   Environment(object):
             states.append((left_tension,right_tension))
 
         #TIP
-        dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
-        left_tension = dleft-self.l0(self._t,self._nsuckers-1-1)
-        states.append((left_tension,2))
+        # dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
+        # left_tension = dleft-self.l0(self._t,self._nsuckers-1-1)
+        # states.append((left_tension,2))
 
         return states
 
@@ -767,24 +770,24 @@ class   Environment(object):
                 #BASE
         # print("here")
 
-        if action[0] == 0:
-            pright = self._agents[0].rightNeighbor._position_old
-            dist = pright -self._agents[0]._position_old
-            if dist<0:
-                # old_dist = dist.copy()
-                dist += self._box.boundary
-                # print(old_dist,dist)
-            inst_vel = (dist  - self.l0(self._t,0))
-            delta_x=self.deltaT * inst_vel
-            self._agents[0].position = self._agents[0]._position_old + delta_x
-            self._agents[0]._abslutePosition = self._agents[0]._abslutePosition_old + delta_x
-        else:
-            # if (self._agents[0].rightNeighbor._position -self._agents[0].position)<0:
-            #     print("base active ", self._agents[0].position)
-            pass
-        self._agents[0].lastAction=action[0]
+        # if action[0] == 0:
+        #     pright = self._agents[0].rightNeighbor._position_old
+        #     dist = pright -self._agents[0]._position_old
+        #     if dist<0:
+        #         # old_dist = dist.copy()
+        #         dist += self._box.boundary
+        #         # print(old_dist,dist)
+        #     inst_vel = (dist  - self.l0(self._t,0))
+        #     delta_x=self.deltaT * inst_vel
+        #     self._agents[0].position = self._agents[0]._position_old + delta_x
+        #     self._agents[0]._abslutePosition = self._agents[0]._abslutePosition_old + delta_x
+        # else:
+        #     # if (self._agents[0].rightNeighbor._position -self._agents[0].position)<0:
+        #     #     print("base active ", self._agents[0].position)
+        #     pass
+        # self._agents[0].lastAction=action[0]
         #INTERMEDIATE
-        for sucker in self._agents[1:self._nsuckers-1]:
+        for sucker in self._agents[0:self._nsuckers]:
             k = sucker._id
             sucker.lastAction = action[k]
             if action[k] == 1:  
@@ -807,18 +810,18 @@ class   Environment(object):
                 sucker.position = sucker._position_old + delta_x
                 sucker._abslutePosition = sucker._abslutePosition_old + delta_x#here by setter method includes boundaries
         #TIP
-        if action[self._nsuckers-1] == 0:
-            pleft = self._agents[self._nsuckers-1].leftNeighbor._position_old
-            dist = self._agents[self._nsuckers-1]._position_old -pleft
-            if dist<0:
-                dist+=self._box.boundary
-            inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
-            delta_x = self.deltaT * inst_vel
-            self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + delta_x
-            self._agents[self._nsuckers-1]._abslutePosition = self._agents[self._nsuckers-1]._abslutePosition_old + delta_x
-        else:
-            pass
-        self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
+        # if action[self._nsuckers-1] == 0:
+        #     pleft = self._agents[self._nsuckers-1].leftNeighbor._position_old
+        #     dist = self._agents[self._nsuckers-1]._position_old -pleft
+        #     if dist<0:
+        #         dist+=self._box.boundary
+        #     inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
+        #     delta_x = self.deltaT * inst_vel
+        #     self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + delta_x
+        #     self._agents[self._nsuckers-1]._abslutePosition = self._agents[self._nsuckers-1]._abslutePosition_old + delta_x
+        # else:
+        #     pass
+        # self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
 
 
         #REWARD AND TERMINAL STATE
