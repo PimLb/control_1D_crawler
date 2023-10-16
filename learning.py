@@ -6,13 +6,13 @@
 
 from globals import *
 import numpy as np
-import copy 
+# import copy 
 
 max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.0025 # was 0.05 then 0.01, for hive 0.0025
+min_lr = 0.001 # was 0.05 then 0.01, for hive 0.0025
 gamma = 0.9#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.0025
+min_epsilon =0.01
 
 stateName =['->|<- ','->|-> ','->|tip ','<-|<- ','<-|-> ','<-|tip ','base|<- ','base|-> ']
 actionState=[' not anchoring',' anchoring']
@@ -99,8 +99,8 @@ class actionValue(object):
                 Q[6] = np.random.random(self.dim[1])
                 Q[7] = np.random.random(self.dim[1])
                 
-                self._Q.append(Q) 
-                self._oldQ.append(Q)
+                self._Q.append(copy.deepcopy(Q)) 
+                self._oldQ.append(copy.deepcopy(Q))
                 Q={}
                 #INTERMEDIATE ONES
                 Q[0] = np.random.random(self.dim[1])
@@ -108,15 +108,15 @@ class actionValue(object):
                 Q[3] = np.random.random(self.dim[1])
                 Q[4] = np.random.random(self.dim[1])
                 for k in range(1,self._nAgents-1):
-                    self._Q.append(Q) 
-                    self._oldQ.append(Q)
+                    self._Q.append(copy.deepcopy(Q)) 
+                    self._oldQ.append(copy.deepcopy(Q))
                 # Q = np.zeros(self.dim)
                 #TIP
                 Q={}
                 Q[2] = np.random.random(self.dim[1])
                 Q[5] = np.random.random(self.dim[1])
-                self._Q.append(Q) 
-                self._oldQ.append(Q)
+                self._Q.append(copy.deepcopy(Q)) 
+                self._oldQ.append(copy.deepcopy(Q))
                 self.get_value = self._get_value_noHive
                 self.get_av_value = self._get_av_value_noHive
                 self._get_diff = self._get_diff_noHive
@@ -306,7 +306,7 @@ class actionValue(object):
         plt.figure(figsize=(10, 6))
         self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
         self._fig_value.set_title(label='Value ('+str(self._state_space) + ' states)')
-        sub_sampling = 10
+        sub_sampling = 5
         # last = int(self._greedySteps/sub_sampling)
         values = self._value[0:len(self._value):sub_sampling]
         episodes = [e for e in range(0,self.n_episodes+1,sub_sampling)]
