@@ -1,8 +1,3 @@
-#TODO implement tools to monitor learning (value computation, convergence ecc)
-# Make Q matrix a dictionary for efficiency <---
-# MAKE DIFFERENT Q MATRIX FOR TIP AND BASE: with dictionary is straight forward but plotting methods change ok
-# Give states as tuple in dictionary
-# Initialize Q according to dedicated funtion generating all available dictionary keys (like 'base', intermediate i, tip ecc)
 
 from globals import *
 import numpy as np
@@ -112,7 +107,7 @@ class actionValue(object):
                 internal_states = stateMap_intermediate.items()
                 for k in internal_states:
                     Q[k] = np.random.random(self.dim[1])
-                for i in range(0,self._nAgents):
+                for i in range(0,self._nAgents-1):
                     self._Q.append(copy.deepcopy(Q)) 
                     self._oldQ.append(copy.deepcopy(Q))
                 # Q = np.zeros(self.dim)
@@ -168,7 +163,7 @@ class actionValue(object):
         Conceptually it's still multiagent for how the states
         have been defined
         '''
-        for  k in range(0,self._nAgents):
+        for  k in range(self._nAgents):
             s_new,_a_new = self._get_index(newstate[k]) 
             s_old,a_old = self._get_index(oldstate[k],action[k])
             self._Q[s_old][a_old] += self.lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old][a_old])
