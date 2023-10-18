@@ -371,7 +371,7 @@ class   Environment(object):
         if is_multiagent == True:
             self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
             self.action_space_dim = 2
-            self.state_space = {(0,0):'->|<- ',(0,1):'->|-> ',(1,0):'<-|<- ',(1,1):'<-|-> '}#,'base|<- ','base|->' ,'->|tip ','<-|tip ']#4 internal + 2 tip + 2 base
+            self.state_space = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}#,'base|<- ','base|->' ,'->|tip ','<-|tip ']#4 internal + 2 tip + 2 base
             self.state_space_dim = 4
         else:
             #OBSOLETE

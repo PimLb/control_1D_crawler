@@ -9,10 +9,10 @@ gamma = 0.9#discount 0.9 to reflect upon..
 max_epsilon = 0.9
 min_epsilon =0.005
 
-stateName =['->|<- ','->|-> ','<-|<- ','<-|-> ']
+stateName =['->|<-','->|->','<-|<-','<-|->']
 # stateMap_boundaries = {('base',0):'base|<- ',('base',1):'base|->' ,(0,'tip'):'->|tip ',(1,'tip'):'<-|tip '}
-stateMap_intermediate = {(0,0):'->|<- ',(0,1):'->|-> ',(1,0):'<-|<- ',(1,1):'<-|-> '}
-actionState=[' not anchoring',' anchoring']
+stateMap_intermediate = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}
+actionState=['not anchoring','anchoring']
 
 def interpret_binary(s:tuple):
     return int("".join(str(ele) for ele in s), 2)
