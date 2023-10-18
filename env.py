@@ -35,6 +35,7 @@ np.seterr(invalid='ignore')
 
 #PHYSICAL PARAMETERS
 #scaling --> keep zeta =1 and k same order of zeta, k = zeta
+tentacle_length = 30
 zeta = 1
 elastic_constant = 1 
 
@@ -53,9 +54,6 @@ dt = 0.1
 
 
 minDistance = 0.5
-
-x0 = 2.5
-amplitude = 0.5
 
 
 FPS = 20
@@ -212,7 +210,7 @@ class Agent(object):
 
             
 
-def build_tentacle(n_suckers,box,l0, exploringStarts = False):
+def build_tentacle(n_suckers,box,l0,x0,exploringStarts = False):
     #NOW CREATES VIRTUAL AGENT/SUCKER AT THE RIGHT OF THE TIP, WHICH IS A REPLICA OF THE BASE
     '''
     build tentacle with some randomicity
@@ -280,11 +278,12 @@ class   Environment(object):
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
-        tentacle_length = 30
-        global x0 
-        global amplitude
+        
+
         x0 = tentacle_length/(n_suckers)
         amplitude = x0/10.
+        self.x0 = x0
+        self.amplitude=amplitude
         print('INFINITE TENTACLE')
         print(x0,amplitude)
 
@@ -312,7 +311,7 @@ class   Environment(object):
         # if np.any([self._tposition[k]>=b for k,b in enumerate(self._box.boundary.values())]):
         # if np.any([self._tposition>=self._box.boundary]):
         #     raise ValueError("Target out of simulation box!")
-        self._agents.extend(build_tentacle(n_suckers,box,self.l0)) #doing so self.universe mirrors the content
+        self._agents.extend(build_tentacle(n_suckers,box,self.l0,self.x0)) #doing so self.universe mirrors the content
 
         
 
@@ -403,7 +402,7 @@ class   Environment(object):
     def omega(self,omega):
         self._omega = omega
         alpha = math.atan(self._omega*self._nsuckers**2/(2*np.pi))
-        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude * math.cos(alpha)
+        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *self.amplitude * math.cos(alpha)
         print("Optimal analitical velocity OVERDAMPED= ", self._phase_velocity)
 
     def reset(self,equilibrate=False,exploringStarts = False,fps = FPS):
@@ -421,7 +420,7 @@ class   Environment(object):
         self._agents = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
-        self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,exploringStarts=exploringStarts))
+        self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,exploringStarts=exploringStarts))
 
         if equilibrate:
             self.equilibrate(1000)
@@ -479,7 +478,7 @@ class   Environment(object):
         N = self._nsuckers
         # print (wavelengthFraction)
         # print(x0,amplitude)
-        return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
+        return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
     
     
     def get_state(self):
