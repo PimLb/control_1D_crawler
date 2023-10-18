@@ -219,7 +219,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
     '''
     # Info on space from box objec
     A = []
-    offset_x = box.boundary[0]/5 #box.boundary[0]/n_suckers
+    offset_x = box.boundary[0]/10 #box.boundary[0]/n_suckers
     # print("offset= ",offset_x, box.boundary[0]-offset_x)
     #fare in modo di avere None dove indice non esiste
     # old_position = offset_x
@@ -227,7 +227,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
     if exploringStarts:
         random.seed()#uses by default system time
         if box.dimensions == 1:
-            for k in range(n_suckers):
+            for k in range(n_suckers+1):
                 # position = offset_x + k * x0 + amplitude * random.random()
                 position = old_position - l0(0,n_suckers-1-k) + amplitude * random.uniform(-1,1)
                 #position = old_position + rest_position + amplitude * random.random()
@@ -236,7 +236,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
             A = A[::-1]
         elif box.dimensions == 2:
             offset_y = box.boundary[1]/2
-            for k in range(n_suckers):
+            for k in range(n_suckers+1):
                 position_x = offset_x + k * x0 + amplitude * random.uniform(-1,1)
                 #position_x = old_position + rest_position + amplitude * random.random()
                 #old_position = position_x
@@ -246,7 +246,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
             raise ReferenceError("Simulation box badly or not initialized ?")
     else:
         if box.dimensions == 1:
-            for k in range(n_suckers):
+            for k in range(n_suckers+1):
                 # position = offset_x + k * x0
                 position = old_position - l0(0,n_suckers-1-k)
                 # print(position)
@@ -258,7 +258,7 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
         elif box.dimensions == 2:
             offset_y = box.boundary[1]/2
             # print("offset y",offset_y)
-            for k in range(n_suckers):
+            for k in range(n_suckers+1):
                 position_x = offset_x + k * x0
                 # position_x = old_position + rest_position
                 # old_position = position_x
@@ -267,11 +267,11 @@ def build_tentacle(n_suckers,box,l0, exploringStarts = False):
         else:
             raise ReferenceError("Simulation box badly or not initialized ?")
     #Point to neighbors
-    A[0].assignPointer(0,left=A[n_suckers-2],right = A[1],infoText = "I'm the base") #base is like the tip at its left
+    A[0].assignPointer(0,left=A[n_suckers-1],right = A[1],infoText = "I'm the base") #base is like the tip at its left
     # A[n_suckers].assignPointer(n_suckers,left = A[n_suckers-1],right = A[1],infoText = "virtual sucker") #REPLICA of the base
-    for k in range(1,n_suckers-1):
+    for k in range(1,n_suckers):
         A[k].assignPointer(k,left= A[k-1],right=A[k+1],infoText = "I'm intermediate sucker n " + str(k)) 
-    A[n_suckers-1].assignPointer(n_suckers-1,left = A[n_suckers-2],right = A[1],infoText = "I'm the tip")
+    A[n_suckers].assignPointer(n_suckers-1,left = A[n_suckers-1],right = A[1],infoText = "I'm the virtual sucker")#VIRTUAL SUCKER
     return A
 
 
@@ -283,9 +283,11 @@ class   Environment(object):
         tentacle_length = 30
         global x0 
         global amplitude
-        x0 = tentacle_length/n_suckers
+        x0 = tentacle_length/(n_suckers)
         amplitude = x0/10.
         print(x0,amplitude)
+
+
         self.isMultiagent = is_multiagent
         self._isOverdamped = isOverdamped
 
@@ -335,7 +337,6 @@ class   Environment(object):
 
         if self._box.dimensions == 2:
             raise NameError ("2D dynamics not implemented yet")
-            
 
         
         self.inv_DeltaT = 1./self.deltaT
@@ -344,9 +345,13 @@ class   Environment(object):
         self._CM_position = []
         self._vel =[]
         self._telapsed = []
+
+        self._length =[]
+
         self._telapsed.append(self._t)
         self._CM_position.append(self.get_CM())
         self._tip_positions.append(self.get_tip())
+        self._length.append(self.get_tentacle_length())
         
         self.cumulatedReward = 0
 
@@ -355,6 +360,7 @@ class   Environment(object):
         self._currentPlotTip = []
         self._figTip = None
         self._figCM = None
+        self._figLength = None
         self._figVel = None
         self.window = None
         self.window_size = 800
@@ -399,12 +405,15 @@ class   Environment(object):
         self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude * math.cos(alpha)
         print("Optimal analitical velocity OVERDAMPED= ", self._phase_velocity)
 
-    def reset(self,exploringStarts = False,fps = FPS):
+    def reset(self,equilibrate=False,exploringStarts = False,fps = FPS):
 
         #maybe useless. I'm afraid of memory leaks..
         for s in self._agents:
             del s
-
+        
+        
+        if equilibrate:
+            self.equilibrate(1000)
         self._t = 0 #current time
         self._nsteps = 0
         self._telapsed =[]
@@ -417,9 +426,13 @@ class   Environment(object):
         self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,exploringStarts=exploringStarts))
         self._tip_positions = []
         self._CM_position = []
+        
+        self._length =[]
 
         self._telapsed.append(self._t)
         self._CM_position.append(self.get_CM())
+        self._length.append(self.get_tentacle_length())
+
         self._vel =[]
         self._tip_positions.append(self.get_tip())
 
@@ -444,8 +457,15 @@ class   Environment(object):
         self._CM_position = self._CM_position[-100:]
         self._vel =self._vel[-100:]
 
+        self._length = self._length[-100:]
+
         self.cumulatedReward = 0 #total reward per episode
 
+    def equilibrate(self,steps):
+        action = [0]*self._nsuckers
+        for k in range(steps):
+            self.step(action)
+        self._vel = []
     
     def l0(self,t:float,k:int) -> float:
         '''
@@ -456,7 +476,7 @@ class   Environment(object):
         N = self._nsuckers
         # print (wavelengthFraction)
         # print(x0,amplitude)
-        return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * k)
+        return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
     
     
     def get_state(self):
@@ -499,9 +519,24 @@ class   Environment(object):
         # #update old posiiton
         # self._agents[0]._position_old = self._agents[0].position.copy()
         # self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
-        #Intermediate suckers
-        # for k in range(1,self._nsuckers-1):
-        for sucker in self._agents[0:self._nsuckers]:
+        
+        pright = self._agents[0].rightNeighbor.position
+        pleft = self._agents[self._nsuckers].leftNeighbor.position #virtual sucker neighbor
+        dright = -self._agents[0].position + pright #ok
+        
+        if dright<0:
+            dright +=  self._box.boundary
+        right_tension = sign0(dright-self.l0(self._t,0))
+        dleft = self._agents[self._nsuckers].position - pleft
+        if dleft<0:
+            dleft += self._box.boundary
+        left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1))
+        states.append(self.state_space[(left_tension,right_tension)])
+        self._agents[0]._position_old = self._agents[0].position.copy()
+        self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
+        
+        #Intermediate suckers except virtual one
+        for sucker in self._agents[1:self._nsuckers]:
             #more compact boundary enforcing
             k = sucker._id
             pright = sucker.rightNeighbor.position
@@ -514,13 +549,14 @@ class   Environment(object):
             if dleft<0:
                 dleft += self._box.boundary
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
+            # print((left_tension,right_tension))
             states.append(self.state_space[(left_tension,right_tension)])
 
             #update old posiitons
             sucker._position_old = sucker.position.copy()
             sucker._abslutePosition_old = sucker._abslutePosition.copy()
         # #for the evolution of the virtual sucker
-        # self._agents[self._nsuckers]._position_old = self._agents[self._nsuckers].position.copy()
+        self._agents[self._nsuckers]._position_old = self._agents[self._nsuckers].position.copy()
         
         # #TIP
         # dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
@@ -591,7 +627,7 @@ class   Environment(object):
         return self._agents[-1].position[0]
     
     def get_CM(self):
-        return np.average([a._abslutePosition for a in self._agents])
+        return np.average([a._abslutePosition for a in self._agents[0:self._nsuckers]])
         #return 0.5*(self._agents[0].position+self._agents[-1].position)
 
     def get_instVel(self):
@@ -605,6 +641,9 @@ class   Environment(object):
         '''
         return np.average(self._vel)
 
+    def get_tentacle_length(self):
+        return (self._agents[-1]._abslutePosition[0]-self._agents[0]._abslutePosition[0])
+    
 
 
     def get_observation(self):
@@ -693,6 +732,8 @@ class   Environment(object):
         return reward,terminal
 
     def _stepDamped(self,action):
+        #NOT SUPPORTED FOR INFINITE TENTACLE
+        raise Exception("not supported fir infinite tentacle")
         '''
         NEW: implementing damped dynamics. --> TODO: consider finite friction
         IMPORTANT: old position update upon call to get state function <--
@@ -766,31 +807,32 @@ class   Environment(object):
         # self._agents[0].lastAction=action[0]
         #BOUNDARIES
 
+        #VIRTUAL SUCKER INDEX = nsucker
+
         pright = self._agents[0].rightNeighbor._position_old
         dist = pright -self._agents[0]._position_old
         if dist<0:
             # old_dist = dist.copy()
             dist += self._box.boundary
         right_force = (dist  - self.l0(self._t,0))
-        pleft = self._agents[self._nsuckers-1].leftNeighbor._position_old #virtual
-        dist = self._agents[self._nsuckers-1]._position_old -pleft
+        pleft = self._agents[self._nsuckers].leftNeighbor._position_old #virtual sucker
+        dist = self._agents[self._nsuckers]._position_old -pleft
         if dist<0:
             dist+=self._box.boundary
-        left_force = -(dist - self.l0(self._t,self._nsuckers-2))
+        left_force = -(dist - self.l0(self._t,self._nsuckers-1))
         inst_vel_boundary = right_force + left_force
         delta_x=self.deltaT * inst_vel_boundary
         if action[0] == 0 :#and action[self._nsuckers-1]==0:
             #virtual sucker-base evolves feeling same forces of base
             self._agents[0].position = self._agents[0]._position_old + delta_x
-        if action[self._nsuckers-1]==0:
-            self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + delta_x
+            self._agents[self._nsuckers].position = self._agents[self._nsuckers]._position_old + delta_x
         
         self._agents[0].lastAction = action[0]
-        self._agents[self._nsuckers-1].lastAction = action[self._nsuckers-1]
+        self._agents[self._nsuckers].lastAction = self._agents[0].lastAction
         # self._agents[self._nsuckers-1].lastAction = action[self._nsuckers-1]
         # self._agents[0].lastAction = self._agents[self._nsuckers-1].lastAction
         #INTERMEDIATE
-        for sucker in self._agents[1:self._nsuckers-1]:
+        for sucker in self._agents[1:self._nsuckers]:
             k = sucker._id
             sucker.lastAction = action[k]
             if action[k] == 1:  
@@ -800,7 +842,7 @@ class   Environment(object):
                 pright = sucker.rightNeighbor._position_old.copy()
                 me = sucker._position_old.copy()
                 # crossed=False
-                if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
+                if pright - pleft <0: 
                     # print(sucker.info)
                     # print("here pl,me, pr",pleft,me,pright)
                     pright = pright + self._box.boundary
@@ -835,6 +877,8 @@ class   Environment(object):
         
         self._tip_positions.append(self.get_tip())
         self._CM_position.append(self.get_CM())
+
+        self._length.append(self.get_tentacle_length())
 
 
         reward,terminal = self._getReward()
@@ -912,7 +956,25 @@ class   Environment(object):
         plt.ion()
         plt.show()
 
-    # 
+    def _plot_length(self):
+        if self._figLength is None:
+            plt.figure()
+            print("initializing matplotlib plot")
+            self._figLength= plt.subplot(xlabel='time steps', ylabel='CM position') #fig,ax
+            
+        
+        # self._figCM.cla()
+        # print(self._telapsed[:10],self._tip_positions[:10])
+        # for l in self._currentPlotCM:
+        #     l.remove()
+        self._figLength.set_title(label='tentacle length, episode '+str(self._episode))
+        self._figLength.plot(self._telapsed,self._length,linewidth=2)
+        
+        plt.ion()
+        plt.show()
+    def plot_length(self):
+        return self._plot_length()
+
 
     def render(self,special_message = None):
         
@@ -979,10 +1041,21 @@ class   Environment(object):
                 
                 if agent.lastAction == 0:
                     color = violet
+                    if agent.info == "I'm the virtual sucker":
+                        color ='gray'
+                    # if agent.info =="I'm the base":
+                    #     color = 'black'
+                    # elif agent.info =="I'm the tip":
+                    #     color = 'yellow'
                 else:
                     color = blue
-                # if agent.info == "virtual sucker":
-                #     color ='gray'
+                    if agent.info == "I'm the virtual sucker":
+                        color ='black'
+                    # if agent.info =="I'm the base":
+                    #     color = 'red'
+                    # elif agent.info =="I'm the tip":
+                    #     color = 'orange'
+                
                 try:
                     print(a[1])
                     print("here2D")
@@ -1027,18 +1100,19 @@ class   Environment(object):
                             lenght = math.ceil((right - a)[0])
                             # pygame.draw.line(canvas,0,a,right)
                             size = self.pix_square_size/2 *(1-n/nagents) + self.pix_square_size/5
-                            if agent.info == "I'm the tip":
+                            if agent.info == "I'm the virtual sucker":
                                 pass
                             else:
                                 if (agent.rightNeighbor.position[0] * self.pix_square_size) < a[0]:
                                     pass
                                 else:
+                                    c = 'red'
                                     # print(n-1)
                                     #plot rest position of spring
-                                    if agent.info == "I'm the base":
-                                        c = 'black'
-                                    else:
-                                        c = 'red'
+                                    # if agent.info == "I'm the base":
+                                    #     c = 'black'
+                                    # else:
+                                    #     c = 'red'
                                     pygame.draw.circle(
                                         canvas,
                                         c,
