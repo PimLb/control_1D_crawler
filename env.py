@@ -372,7 +372,7 @@ class   Environment(object):
             # self.state_space = 8#4
             self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
             self.action_space_dim = 2
-            self.state_space = {(0,0):'->|<- ',(0,1):'->|-> ',(1,0):'<-|<- ',(1,1):'<-|-> ',('base',0):'base|<- ',('base',1):'base|->' ,(0,'tip'):'->|tip ',(1,'tip'):'<-|tip '}#4 internal + 2 tip + 2 base
+            self.state_space = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
             self.state_space_dim = 8
         else:
             #OBSOLETE
