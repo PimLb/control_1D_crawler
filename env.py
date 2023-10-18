@@ -285,6 +285,7 @@ class   Environment(object):
         global amplitude
         x0 = tentacle_length/(n_suckers)
         amplitude = x0/10.
+        print('INFINITE TENTACLE')
         print(x0,amplitude)
 
 
