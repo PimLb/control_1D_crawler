@@ -1,8 +1,3 @@
-#TODO implement tools to monitor learning (value computation, convergence ecc)
-# Make Q matrix a dictionary for efficiency <---
-# MAKE DIFFERENT Q MATRIX FOR TIP AND BASE: with dictionary is straight forward but plotting methods change ok
-# Give states as tuple in dictionary
-# Initialize Q according to dedicated funtion generating all available dictionary keys (like 'base', intermediate i, tip ecc)
 
 from globals import *
 import numpy as np
@@ -15,6 +10,9 @@ max_epsilon = 0.9
 min_epsilon =0.01
 
 stateName =['->|<- ','->|-> ','->|tip ','<-|<- ','<-|-> ','<-|tip ','base|<- ','base|-> ']
+stateMap_base = {('base',0):'base|<-',('base',1):'base|->'}
+stateMap_tip = {(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
+stateMap_intermediate = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}
 actionState=[' not anchoring',' anchoring']
 
 def interpret_binary(s:tuple):
@@ -31,6 +29,8 @@ class actionValue(object):
     def __init__(self,learning_space:tuple,nAgents,total_episodes,hiveUpdate = True) -> None:
         self._state_space = learning_space[0]
         self._action_space = learning_space[1]
+        self._action_dim = len(self._action_space)
+        self.dim = (len(self._state_space),len(self._action_space))
         self._nAgents = nAgents
         self.epsilon = max_epsilon
         self.lr = max_lr
@@ -53,14 +53,13 @@ class actionValue(object):
             self._multiAgent = True
             if hiveUpdate:
                 self._parallelUpdate = True
-                self.dim = learning_space
                 print("\n** HIVE UPDATE **\n")
                 self.update = self._update_Q_parallel
                 self.get_action = self._get_action_hiveUpdate
                 Q={}
                 #k could be whatsover even directly the tuple of states
                 #   --> Can drop the interpreter but need a function producing all possible states
-                for k in range(self.dim[0]):
+                for k in self._state_space.values():
                     Q[k] = np.random.random(self.dim[1])
                 # Q = np.random.random(self.dim)
                 self._Q = Q
@@ -81,8 +80,7 @@ class actionValue(object):
                 self.plot_convergence = self._plot_convergence_hive
                 self.plot_av_value = self._plot_av_value_hive
             else:
-                self._parallelUpdate = False
-                self.dim = learning_space 
+                self._parallelUpdate = False 
                 self.update = self._update_Q_single
                 self.get_action = self._get_action_not_hiveUpdate
                 self._Q = []
@@ -96,27 +94,36 @@ class actionValue(object):
                 
                 #BASE
                 Q={}
-                Q[6] = np.random.random(self.dim[1])
-                Q[7] = np.random.random(self.dim[1])
-                
+                # Q[self._state_space[4]] = np.random.random(self.dim[1])
+                # Q[self._state_space[5]] = np.random.random(self.dim[1])
+                base_states = stateMap_base.values()
+                for k in base_states:
+                    Q[k] = np.random.random(self.dim[1])
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
                 Q={}
                 #INTERMEDIATE ONES
-                Q[0] = np.random.random(self.dim[1])
-                Q[1] = np.random.random(self.dim[1])
-                Q[3] = np.random.random(self.dim[1])
-                Q[4] = np.random.random(self.dim[1])
-                for k in range(1,self._nAgents-1):
+                # Q[0] = np.random.random(self.dim[1])
+                # Q[1] = np.random.random(self.dim[1])
+                # Q[3] = np.random.random(self.dim[1])
+                # Q[4] = np.random.random(self.dim[1])
+                internal_states = stateMap_intermediate.values()
+                for k in internal_states:
+                    Q[k] = np.random.random(self.dim[1])
+                for i in range(1,self._nAgents-1):
                     self._Q.append(copy.deepcopy(Q)) 
                     self._oldQ.append(copy.deepcopy(Q))
-                # Q = np.zeros(self.dim)
+                
                 #TIP
                 Q={}
-                Q[2] = np.random.random(self.dim[1])
-                Q[5] = np.random.random(self.dim[1])
+                tip_states = stateMap_tip.values()
+                for k in tip_states:
+                    Q[k] = np.random.random(self.dim[1])
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
+                # Q[self._state_space[6]] = np.random.random(self.dim[1])
+                # Q[self._state_space[7]] = np.random.random(self.dim[1])
+
                 self.get_value = self._get_value_noHive
                 self.get_av_value = self._get_av_value_noHive
                 self._get_diff = self._get_diff_noHive
@@ -156,26 +163,35 @@ class actionValue(object):
         #     j = interpret_binary(action)
             
         return i,j
-    def _update_Q_parallel(self,newstate,oldstate,action,reward):
+    def _update_Q_parallel(self,newstate,state,action,reward):
         '''
         Update the Q function, return new action.
         Single Q which is updated by all agents.
         Conceptually it's still multiagent for how the states
         have been defined
         '''
-        for  k in range(0,self._nAgents):
-            s_new,_a_new = self._get_index(newstate[k]) 
-            s_old,a_old = self._get_index(oldstate[k],action[k])
-            self._Q[s_old][a_old] += self.lr* (reward + gamma * np.amax(self._Q[s_new]) - self._Q[s_old][a_old])
+        for  k in range(self._nAgents):
+            # s_new,_a_new = self._get_index(newstate[k]) 
+            # s_old,a_old = self._get_index(oldstate[k],action[k])
+            old_state = state[k]
+            # print(old_state)
+            old_action = action[k]
+            # print(old_action)
+            new_state = newstate[k]
+            # print(new_state)
+            self._Q[old_state][old_action] += self.lr* (reward + gamma * np.amax(self._Q[new_state]) - self._Q[old_state][old_action])
 
         
 
-    def _update_Q_single(self,newstate,oldstate,action,reward):
+    def _update_Q_single(self,newstate,state,action,reward):
         #update each agent Q
         for  k in range(self._nAgents):
-            s_new,_a_new = self._get_index(newstate[k]) 
-            s_old,a_old = self._get_index(oldstate[k],action[k])
-            self._Q[k][s_old][a_old] += self.lr* (reward + gamma * np.amax(self._Q[k][s_new]) - self._Q[k][s_old][a_old])
+            # s_new,_a_new = self._get_index(newstate[k]) 
+            # s_old,a_old = self._get_index(oldstate[k],action[k])Q.
+            old_state = state[k]
+            old_action = action[k]
+            new_state = newstate[k]
+            self._Q[k][old_state][old_action] += self.lr* (reward + gamma * np.amax(self._Q[k][new_state]) - self._Q[k][old_state][old_action])
 
             #This could be more efficient but applicable only in this case
             # if np.random.random() < (1 - self.epsilon):
@@ -184,32 +200,32 @@ class actionValue(object):
             #     newaction.append(np.random.randint(0,  self.action_space))
         #NOT IMPLEMENTED --> (need one for each Q) UPDATE OBSERVABLES
     
-    def _get_action_hiveUpdate(self,s):
+    def _get_action_hiveUpdate(self,state):
         new_action = []
         for k in range(self._nAgents):
-            sind,_a = self._get_index(s[k])
+            # sind,_a = self._get_index(s[k])
             if np.random.random() < (1 - self.epsilon):
-                new_action.append(np.argmax(self._Q[sind]))
+                new_action.append(np.argmax(self._Q[state[k]]))
             else:
-                new_action.append(np.random.randint(0,self._action_space))
+                new_action.append(np.random.randint(0,self._action_dim))
         return new_action
-    def _get_action_not_hiveUpdate(self,s):
+    def _get_action_not_hiveUpdate(self,state):
         new_action = []
         for k in range(self._nAgents):
-            sind,_a = self._get_index(s[k])
+            # sind,_a = self._get_index(s[k])
             if np.random.random() < (1 - self.epsilon):
-                new_action.append(np.argmax(self._Q[k][sind]))
+                new_action.append(np.argmax(self._Q[k][state[k]]))
             else:
-                new_action.append(np.random.randint(0,self._action_space))
+                new_action.append(np.random.randint(0,self._action_dim))
         return new_action
-    def _get_action_singleAgent(self,s):
+    def _get_action_singleAgent(self,state):
         #ATTENTION never tested
         #CHECK again and again
             if np.random.random() < (1 - self.epsilon):
-                sind,_a = self._get_index(s)
-                new_action=np.argmax(self._Q[sind])
+                # sind,_a = self._get_index(s)
+                new_action=np.argmax(self._Q[state[k]])
             else:
-                new_action=np.random.randint(0,  self._action_space)
+                new_action=np.random.randint(0,self._action_dim)
 
             return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
     
@@ -225,23 +241,23 @@ class actionValue(object):
         
         
     
-    def get_onPolicy_action(self,s):
+    def get_onPolicy_action(self,state):
         if self._multiAgent:
             new_action = []
             if self._parallelUpdate:
                 for k in range(self._nAgents):
-                    sind,_a = self._get_index(s[k])
+                    # sind,_a = self._get_index(s[k])
                     # print(s[k],sind)
-                    new_action.append(np.argmax(self._Q[sind]))
+                    new_action.append(np.argmax(self._Q[state[k]]))
             else:
                 #one Q function for each agent
                 for k in range(self._nAgents):
-                    sind,_a = self._get_index(s[k])
-                    new_action.append(np.argmax(self._Q[k][sind]))
+                    # sind,_a = self._get_index(s[k])
+                    new_action.append(np.argmax(self._Q[k][state[k]]))
             return new_action
         else:
             #CHECK
-            new_action=np.argmax(self._Q[sind])
+            new_action=np.argmax(self._Q[state[k]])
         
 
             return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
@@ -270,7 +286,7 @@ class actionValue(object):
     def _get_value_hive(self):
         value = {}
         for k in self._Q:
-            value[stateName[k]]=(np.amax(self._Q[k]),np.argmax(self._Q[k]))
+            value[k]=(np.amax(self._Q[k]),np.argmax(self._Q[k]))
         return value
         #return np.vstack((np.amax(self._Q,axis=1),np.argmax(self._Q,axis=1))).T
 
@@ -287,7 +303,7 @@ class actionValue(object):
             value = {}
             Q = self._Q[i]
             for k in Q:
-                value[stateName[k]]=(np.amax(Q[k]),np.argmax(Q[k]))
+                value[k]=(np.amax(Q[k]),np.argmax(Q[k]))
             v.append(value)
         return v
     def _get_av_value_noHive(self):
