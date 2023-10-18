@@ -35,6 +35,7 @@ np.seterr(invalid='ignore')
 
 #PHYSICAL PARAMETERS
 #scaling --> keep zeta =1 and k same order of zeta, k = zeta
+tentacle_length = 30
 zeta = 1
 elastic_constant = 1 
 
@@ -279,7 +280,7 @@ class   Environment(object):
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
-        tentacle_length = 30
+        
         global x0 
         global amplitude
         x0 = tentacle_length/n_suckers
@@ -407,6 +408,12 @@ class   Environment(object):
         print("Optmsl analitical velocity OVERDAMPED= ", self._phase_velocity)
 
     def reset(self,equilibrate = False,exploringStarts = False,fps = FPS):
+
+        #failing to restate global variables can pose problems when automatically reloading libraries in interactive use (ipython)
+        global x0 
+        global amplitude
+        x0 = tentacle_length/self._nsuckers
+        amplitude = x0/10.
 
         #maybe useless. I'm afraid of memory leaks..
         for s in self._agents:
