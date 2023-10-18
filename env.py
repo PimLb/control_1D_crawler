@@ -285,6 +285,7 @@ class   Environment(object):
         global amplitude
         x0 = tentacle_length/n_suckers
         amplitude = x0/10.
+        print("FINITE TENTACLE")
         print(x0,amplitude)
         self.isMultiagent = is_multiagent
         self._isOverdamped = isOverdamped
