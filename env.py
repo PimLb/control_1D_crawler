@@ -534,7 +534,7 @@ class   Environment(object):
         states.append(self.state_space[(left_tension,right_tension)])
         self._agents[0]._position_old = self._agents[0].position.copy()
         self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
-        
+
         #Intermediate suckers except virtual one
         for sucker in self._agents[1:self._nsuckers]:
             #more compact boundary enforcing
@@ -841,20 +841,32 @@ class   Environment(object):
                 pleft = sucker.leftNeighbor._position_old.copy()
                 pright = sucker.rightNeighbor._position_old.copy()
                 me = sucker._position_old.copy()
+
+                dist =  pright -me
+                if dist<0:
+                    dist+=self._box.boundary
+                right_force = (dist  - self.l0(self._t,k))
+
+                dist = me - pleft
+                if dist<0:
+                    dist+=self._box.boundary
+                left_force = -(dist - self.l0(self._t,k-1))
+
+                inst_vel = right_force + left_force
                 # crossed=False
-                if pright - pleft <0: 
-                    # print(sucker.info)
-                    # print("here pl,me, pr",pleft,me,pright)
-                    pright = pright + self._box.boundary
-                    # print("here pl,me, pr",pleft,me,pright)
-                    if (me-pleft)<0:
-                        me += self._box.boundary
-                        # print("here pl,me, pr",pleft,me,pright)
-                        # print('me-pleft: ',me-pleft)
-                    # print("here2 pr pl",pleft,me,pright)
-                    # print('to check memory copy..', sucker._position_old)
-                    # crossed = True
-                inst_vel = (pright + pleft-2*me + self.l0(self._t,k-1) - self.l0(self._t,k))
+                # if pright - pleft <0: 
+                #     # print(sucker.info)
+                #     # print("here pl,me, pr",pleft,me,pright)
+                #     pright = pright + self._box.boundary
+                #     # print("here pl,me, pr",pleft,me,pright)
+                #     if (me-pleft)<0:
+                #         me += self._box.boundary
+                #         # print("here pl,me, pr",pleft,me,pright)
+                #         # print('me-pleft: ',me-pleft)
+                #     # print("here2 pr pl",pleft,me,pright)
+                #     # print('to check memory copy..', sucker._position_old)
+                #     # crossed = True
+                # inst_vel = (pright + pleft-2*me + self.l0(self._t,k-1) - self.l0(self._t,k))
                 delta_x =  self.deltaT * inst_vel
                 sucker.position = sucker._position_old + delta_x
                 sucker._abslutePosition = sucker._abslutePosition_old + delta_x#here by setter method includes boundaries
