@@ -9,8 +9,8 @@ gamma = 0.9#discount 0.9 to reflect upon..
 max_epsilon = 0.9
 min_epsilon =0.01
 
-stateName =['->|<- ','->|-> ','->|tip ','<-|<- ','<-|-> ','<-|tip ','base|<- ','base|-> ']
-stateMap_boundaries = {('base',0):'base|<- ',('base',1):'base|->' ,(0,'tip'):'->|tip ',(1,'tip'):'<-|tip '}
+stateName =['->|<- ','->|-> ','<-|<- ','<-|-> ']
+# stateMap_boundaries = {('base',0):'base|<- ',('base',1):'base|->' ,(0,'tip'):'->|tip ',(1,'tip'):'<-|tip '}
 stateMap_intermediate = {(0,0):'->|<- ',(0,1):'->|-> ',(1,0):'<-|<- ',(1,1):'<-|-> '}
 actionState=[' not anchoring',' anchoring']
 
@@ -28,6 +28,7 @@ class actionValue(object):
     def __init__(self,learning_space:tuple,nAgents,total_episodes,hiveUpdate = True) -> None:
         self._state_space = learning_space[0]
         self._action_space = learning_space[1]
+        self._state_space_dim = len(self._state_space)
         self._action_dim = len(self._action_space)
         self.dim = (len(self._state_space),len(self._action_space))
         self._nAgents = nAgents
@@ -314,7 +315,7 @@ class actionValue(object):
     def _plot_value_hive(self):
         plt.figure(figsize=(10, 6))
         self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
-        self._fig_value.set_title(label='Value ('+str(self._state_space) + ' states)')
+        self._fig_value.set_title(label='Value ('+str(self._state_space_dim) + ' states)')
         sub_sampling = 5
         # last = int(self._greedySteps/sub_sampling)
         values = self._value[0:len(self._value):sub_sampling]
@@ -344,7 +345,7 @@ class actionValue(object):
         stateName = self._value[0][n].keys()
         plt.figure(figsize=(10, 6))
         self._fig_value = plt.subplot(xlabel='episodes', ylabel='value')
-        self._fig_value .set_title(label='Value ('+str(self._state_space) + ' states)' + 'sucker '+str(n))
+        self._fig_value .set_title(label='Value ('+str(self._state_space_dim) + ' states)' + 'sucker '+str(n))
         sub_sampling = 10
         episodes = [e for e in range(0,self.n_episodes+1,sub_sampling)]
         # last = int(self._greedySteps/sub_sampling)
