@@ -213,7 +213,7 @@ class Agent(object):
 
             
 
-def build_tentacle(n_suckers,box,l0,x0, exploringStarts = False):
+def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
     '''
     build tentacle with some randomicity
     '''
@@ -310,7 +310,7 @@ class   Environment(object):
         # if np.any([self._tposition[k]>=b for k,b in enumerate(self._box.boundary.values())]):
         # if np.any([self._tposition>=self._box.boundary]):
         #     raise ValueError("Target out of simulation box!")
-        self._agents.extend(build_tentacle(n_suckers,box,self.l0,self.x0)) #doing so self.universe mirrors the content
+        self._agents.extend(build_tentacle(n_suckers,box,self.l0,self.x0,self.amplitude)) #doing so self.universe mirrors the content
 
         
 
@@ -421,7 +421,7 @@ class   Environment(object):
         self._agents = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
-        self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,exploringStarts=exploringStarts))
+        self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,self.amplitude,exploringStarts=exploringStarts))
 
         if equilibrate:
             self.equilibrate(1000)
