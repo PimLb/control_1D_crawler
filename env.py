@@ -43,6 +43,8 @@ mass = 10 # mass < 0,1 overdamped limit
 
 
 
+
+
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
 dt = 0.1
@@ -55,8 +57,6 @@ dt = 0.1
 
 minDistance = 0.5
 
-x0 = 2.5
-amplitude = 0.5
 
 
 FPS = 20
@@ -213,7 +213,7 @@ class Agent(object):
 
             
 
-def build_tentacle(n_suckers,box,l0, exploringStarts = False):
+def build_tentacle(n_suckers,box,l0,x0, exploringStarts = False):
     '''
     build tentacle with some randomicity
     '''
@@ -281,10 +281,10 @@ class   Environment(object):
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
         
-        global x0 
-        global amplitude
         x0 = tentacle_length/n_suckers
         amplitude = x0/10.
+        self.x0 = x0
+        self.amplitude = amplitude
         print("FINITE TENTACLE")
         print(x0,amplitude)
         self.isMultiagent = is_multiagent
@@ -310,7 +310,7 @@ class   Environment(object):
         # if np.any([self._tposition[k]>=b for k,b in enumerate(self._box.boundary.values())]):
         # if np.any([self._tposition>=self._box.boundary]):
         #     raise ValueError("Target out of simulation box!")
-        self._agents.extend(build_tentacle(n_suckers,box,self.l0)) #doing so self.universe mirrors the content
+        self._agents.extend(build_tentacle(n_suckers,box,self.l0,self.x0)) #doing so self.universe mirrors the content
 
         
 
@@ -369,6 +369,7 @@ class   Environment(object):
         self.metadata = { "render_fps": FPS}
         
 
+
         if is_multiagent == True:
             # self.action_space = 2 # sucker can turn on friction or turn it off
             # self.state_space = 8#4
@@ -405,16 +406,10 @@ class   Environment(object):
     def omega(self,omega):
         self._omega = omega
         alpha = math.atan(self._omega*self._nsuckers**2/(2*np.pi))
-        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude * math.cos(alpha)
+        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *self.amplitude * math.cos(alpha)
         print("Optmsl analitical velocity OVERDAMPED= ", self._phase_velocity)
 
     def reset(self,equilibrate = False,exploringStarts = False,fps = FPS):
-
-        #failing to restate global variables can pose problems when automatically reloading libraries in interactive use (ipython)
-        global x0 
-        global amplitude
-        x0 = tentacle_length/self._nsuckers
-        amplitude = x0/10.
 
         #maybe useless. I'm afraid of memory leaks..
         for s in self._agents:
@@ -426,7 +421,7 @@ class   Environment(object):
         self._agents = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
-        self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,exploringStarts=exploringStarts))
+        self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,exploringStarts=exploringStarts))
 
         if equilibrate:
             self.equilibrate(1000)
@@ -487,7 +482,7 @@ class   Environment(object):
         N = self._nsuckers
         # print (wavelengthFraction)
         # print(x0,amplitude)
-        return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
+        return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
     
     
     def get_state(self):
