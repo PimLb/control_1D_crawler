@@ -80,7 +80,6 @@ class actionValue(object):
                 self.plot_av_value = self._plot_av_value_hive
             else:
                 self._parallelUpdate = False
-                self.dim = learning_space 
                 self.update = self._update_Q_single
                 self.get_action = self._get_action_not_hiveUpdate
                 self._Q = []
@@ -108,7 +107,7 @@ class actionValue(object):
                 internal_states = stateMap_intermediate.values()
                 for k in internal_states:
                     Q[k] = np.random.random(self.dim[1])
-                for i in range(0,self._nAgents-1):
+                for i in range(0,self._nAgents):
                     self._Q.append(copy.deepcopy(Q)) 
                     self._oldQ.append(copy.deepcopy(Q))
                 # Q = np.zeros(self.dim)
