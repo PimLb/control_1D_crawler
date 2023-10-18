@@ -343,10 +343,16 @@ class   Environment(object):
         self._CM_position = []
         self._vel =[]
         self._telapsed = []
+
+        self._length =[]
+
+
         self._telapsed.append(self._t)
         self._CM_position.append(self.get_CM())
         self._tip_positions.append(self.get_tip())
-        
+        self._length.append(self.get_tentacle_length())
+
+
         self.cumulatedReward = 0
 
         #rendering data
@@ -362,9 +368,14 @@ class   Environment(object):
         
 
         if is_multiagent == True:
-            self.action_space = 2 # sucker can turn on friction or turn it off
-            self.state_space = 8#4
+            # self.action_space = 2 # sucker can turn on friction or turn it off
+            # self.state_space = 8#4
+            self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
+            self.action_space_dim = 2
+            self.state_space = {(0,0):'->|<- ',(0,1):'->|-> ',(1,0):'<-|<- ',(1,1):'<-|-> ',('base',0):'base|<- ',('base',1):'base|->' ,(0,'tip'):'->|tip ',(1,'tip'):'<-|tip '}#4 internal + 2 tip + 2 base
+            self.state_space_dim = 8
         else:
+            #OBSOLETE
             self.action_space = np.power(2,n_suckers)
             self.state_space = np.power(8,n_suckers)# np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
 
@@ -395,22 +406,30 @@ class   Environment(object):
         self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *amplitude * math.cos(alpha)
         print("Optmsl analitical velocity OVERDAMPED= ", self._phase_velocity)
 
-    def reset(self,exploringStarts = False,fps = FPS):
+    def reset(self,equilibrate = False,exploringStarts = False,fps = FPS):
 
         #maybe useless. I'm afraid of memory leaks..
         for s in self._agents:
             del s
 
-        self._t = 0 #current time
-        self._nsteps = 0
-        self._telapsed =[]
-        self._episode += 1
+        
         t_position = self._tposition#keep same target
         self._universe = {"agents":[],"target":[]}
         self._agents = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
         self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,exploringStarts=exploringStarts))
+
+        if equilibrate:
+            self.equilibrate(1000)
+
+        self._t = 0 #current time
+        self._nsteps = 0
+        self._telapsed =[]
+        self._episode += 1
+
+        self._length =[]
+        
         self._tip_positions = []
         self._CM_position = []
 
@@ -418,6 +437,7 @@ class   Environment(object):
         self._CM_position.append(self.get_CM())
         self._vel =[]
         self._tip_positions.append(self.get_tip())
+        self._length.append(self.get_tentacle_length())
 
         
         self.cumulatedReward = 0 #total reward per episode
@@ -440,8 +460,15 @@ class   Environment(object):
         self._CM_position = self._CM_position[-100:]
         self._vel =self._vel[-100:]
 
+        self._length = self._length[-100:]
+
         self.cumulatedReward = 0 #total reward per episode
 
+    def equilibrate(self,steps):
+        action = [0]*self._nsuckers
+        for k in range(steps):
+            self.step(action)
+        self._vel = []
     
     def l0(self,t:float,k:int) -> float:
         '''
@@ -490,7 +517,7 @@ class   Environment(object):
             dright +=  self._box.boundary
             # print(dright)
         right_tension = sign0(dright-self.l0(self._t,0))
-        states.append((2,right_tension))
+        states.append(self.state_space[('base',right_tension)])
 
         #update old posiiton
         self._agents[0]._position_old = self._agents[0].position.copy()
@@ -510,7 +537,7 @@ class   Environment(object):
             if dleft<0:
                 dleft += self._box.boundary
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
-            states.append((left_tension,right_tension))
+            states.append(self.state_space[(left_tension,right_tension)])
 
             #update old posiitons
             sucker._position_old = sucker.position.copy()
@@ -520,8 +547,8 @@ class   Environment(object):
         dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
         if dleft<0:
             dleft += self._box.boundary
-        left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1-1))
-        states.append((left_tension,2))
+        left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-2))
+        states.append(self.state_space[(left_tension,'tip')])
 
         #update old posiiton
         self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position.copy()
@@ -545,9 +572,9 @@ class   Environment(object):
         #             S.append(states[i][1]*states[j][1])
         #     return S
         
-    def get_humandR_state(self):
-        state = self.get_state()
-        return [ ( "elongated" if s[0]==1 else "compressed" if s[0]==0 else "base" , "elongated" if s[1] ==1 else "compressed" if s[1]==0 else "tip") for s in state]
+    # def get_humandR_state(self):
+    #     state = self.get_state()
+    #     return [ ( "elongated" if s[0]==1 else "compressed" if s[0]==0 else "base" , "elongated" if s[1] ==1 else "compressed" if s[1]==0 else "tip") for s in state]
 
     def get_stateDebug(self):
         #BASE
@@ -590,7 +617,7 @@ class   Environment(object):
 
     def get_instVel(self):
         vel = self.inv_DeltaT*(self._CM_position[-1]-self._CM_position[-2])
-        self._vel.append(vel)
+        
         return vel
 
     def get_averageVel(self):
@@ -599,7 +626,8 @@ class   Environment(object):
         '''
         return np.average(self._vel)
 
-
+    def get_tentacle_length(self):
+        return (self._agents[-1]._abslutePosition[0]-self._agents[0]._abslutePosition[0])
 
     def get_observation(self):
         '''returns a human readable observation (position of each sucker)'''
@@ -656,7 +684,7 @@ class   Environment(object):
         #CM BASED
         #advancing = self._CM_position[-1]-self._CM_position[-2]
         vel = self.get_instVel()
-
+        self._vel.append(vel)
         #TIP BASED
         # try:
         #     advancing = self._tip_positions[-1]-self._tip_positions[-2]
@@ -720,6 +748,8 @@ class   Environment(object):
 
         self._tip_positions.append(self.get_tip())
         self._CM_position.append(self.get_CM())
+
+        self._length.append(self.get_tentacle_length())
 
 
         reward,terminal = self._getReward()
@@ -793,16 +823,28 @@ class   Environment(object):
                 pleft = sucker.leftNeighbor._position_old.copy()
                 pright = sucker.rightNeighbor._position_old.copy()
                 me = sucker._position_old.copy()
+
+                dist =  pright -me
+                if dist<0:
+                    dist+=self._box.boundary
+                right_force = (dist  - self.l0(self._t,k))
+
+                dist = me - pleft
+                if dist<0:
+                    dist+=self._box.boundary
+                left_force = -(dist - self.l0(self._t,k-1))
+
+                inst_vel = right_force + left_force
                 # crossed=False
-                if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
-                    # print("here pl,me, pr",pleft,me,pright)
-                    pright = pright + self._box.boundary
-                    if (me-pleft)<0:
-                        me += self._box.boundary
-                    # print("here2 pr pl",pleft,me,pright)
-                    # print('to check memory copy..', sucker._position_old)
-                    # crossed = True
-                inst_vel = (pright + pleft-2*me + self.l0(self._t,k-1) - self.l0(self._t,k))
+                # if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
+                #     # print("here pl,me, pr",pleft,me,pright)
+                #     pright = pright + self._box.boundary
+                #     if (me-pleft)<0:
+                #         me += self._box.boundary
+                #     # print("here2 pr pl",pleft,me,pright)
+                #     # print('to check memory copy..', sucker._position_old)
+                #     # crossed = True
+                # inst_vel = (pright + pleft-2*me + self.l0(self._t,k-1) - self.l0(self._t,k))
                 delta_x =  self.deltaT * inst_vel
                 sucker.position = sucker._position_old + delta_x
                 sucker._abslutePosition = sucker._abslutePosition_old + delta_x#here by setter method includes boundaries
@@ -825,6 +867,8 @@ class   Environment(object):
         
         self._tip_positions.append(self.get_tip())
         self._CM_position.append(self.get_CM())
+
+        self._length.append(self.get_tentacle_length())
 
 
         reward,terminal = self._getReward()
@@ -902,7 +946,22 @@ class   Environment(object):
         plt.ion()
         plt.show()
 
-    # 
+    def _plot_length(self):
+        if self._figLength is None:
+            plt.figure()
+            print("initializing matplotlib plot")
+            self._figLength= plt.subplot(xlabel='time steps', ylabel='CM position')
+        self._figLength.set_title(label='tentacle length, episode '+str(self._episode))
+        self._figLength.plot(self._telapsed,self._length,linewidth=2)
+        
+        plt.ion()
+        plt.show()
+    def plot_length(self):
+        return self._plot_length()
+    
+
+
+
 
     def render(self,special_message = None):
         
