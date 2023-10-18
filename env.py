@@ -411,9 +411,6 @@ class   Environment(object):
         for s in self._agents:
             del s
         
-        
-        if equilibrate:
-            self.equilibrate(1000)
         self._t = 0 #current time
         self._nsteps = 0
         self._telapsed =[]
@@ -424,6 +421,11 @@ class   Environment(object):
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
         self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,exploringStarts=exploringStarts))
+
+        if equilibrate:
+            self.equilibrate(1000)
+
+        
         self._tip_positions = []
         self._CM_position = []
         
@@ -632,7 +634,6 @@ class   Environment(object):
 
     def get_instVel(self):
         vel = self.inv_DeltaT*(self._CM_position[-1]-self._CM_position[-2])
-        self._vel.append(vel)
         return vel
 
     def get_averageVel(self):
@@ -701,6 +702,7 @@ class   Environment(object):
         #CM BASED
         #advancing = self._CM_position[-1]-self._CM_position[-2]
         vel = self.get_instVel()
+        self._vel.append(vel)
 
         #TIP BASED
         # try:
