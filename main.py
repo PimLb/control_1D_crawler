@@ -77,6 +77,8 @@ for n_suckers in ns:
     env.equilibrate(1000)
     Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True) 
     state = env.get_state()
+    print("lr =",Q.lr)
+    print("epsilon =", Q.epsilon)
     for e in trange(episodes):
         # if (e%20==0):
         #     print(e)
@@ -89,7 +91,11 @@ for n_suckers in ns:
             state,reward,terminal  = env.step(action)
             Q.update(state,old_state,action,reward)
         Q.makeGreedy() #just for scheduling, not linked to an actual episode
-        env.reset_partial() #to avoid abuse of memory DOES NOT reset position 
+        env.reset_partial() #to avoid abuse of memory DOES NOT reset position
+    print("lr =",Q.lr)
+    print("epsilon =", Q.epsilon) 
+    print(Q.get_value())
     vel_RLhive.append(env.get_averageVel())
+    print("average_vel =",vel_RLhive[-1])
 
 print(vel_RLhive())
