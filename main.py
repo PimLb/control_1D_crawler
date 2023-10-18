@@ -17,7 +17,7 @@ t_position = 41
 # steps = 5000
 
 # env = Environment(n_suckers,sim_shape,t_position,carrierMode=carrierMode)
-# Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,n_episodes=episodes)
+# Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes)
 # #OBS: action array is identically formulated for both multiagent and single. What changes is the indexing strategy
 
 # for e in range(episodes):
@@ -47,7 +47,7 @@ t_position = 41
 # sim_shape = (40,)
 # t_position = 41 #target out of simulation box 
 # env = Environment(n_suckers,sim_shape,t_position,carrierMode=carrierMode,omega=0.1)
-# Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,n_episodes=episodes,hiveUpdate=True)
+# Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True)
 # #OBS: action array is identically formulated for both multiagent and single. What changes is the indexing strategy
 # state = env.get_state()
 # for e in range(episodes):
@@ -70,10 +70,12 @@ steps = 2000
 episodes=1000
 ns =[5,10,15,20,25,30,35]
 vel_RLhive =[]
+print('number of suckers analysed:', ns)
 for n_suckers in ns:
+    print('learning for tentacle with '+str(n_suckers)+' suckers\n')
     env = Environment(n_suckers,sim_shape,t_position,omega=0.1,carrierMode=carrierMode,isOverdamped=True)
     env.equilibrate(1000)
-    Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,n_episodes=episodes,hiveUpdate=True) 
+    Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True) 
     state = env.get_state()
     for e in trange(episodes):
         # if (e%20==0):
