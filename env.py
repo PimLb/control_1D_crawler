@@ -487,7 +487,7 @@ class   Environment(object):
         N = self._nsuckers
         # print (wavelengthFraction)
         # print(x0,amplitude)
-        return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * k)
+        return x0 + amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
     
     
     def get_state(self):
