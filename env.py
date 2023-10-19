@@ -45,7 +45,7 @@ mass = 10 # mass < 0,1 overdamped limit
 
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
-dt = 0.1
+dt = 0.2
 
 #NEW: ASSUME k and zeta same order both in overdamped and damped
 
