@@ -103,4 +103,4 @@ for n_suckers in ns:
     vel_RLhive.append(env.get_averageVel())
     print("average_vel =",vel_RLhive[-1])
 
-print(vel_RLhive())
+print(vel_RLhive)
