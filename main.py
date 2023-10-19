@@ -66,7 +66,7 @@ t_position = 41
 
 from tqdm import trange
 #Automatic analysis
-steps = 2000
+steps = 4000
 episodes=1000
 ns =[5,8,10,12,15,20,25,30,35]
 vel_RLhive =[]
@@ -103,4 +103,4 @@ for n_suckers in ns:
     vel_RLhive.append(env.get_averageVel())
     print("average_vel =",vel_RLhive[-1])
 
-print(vel_RLhive())
+print(vel_RLhive)
