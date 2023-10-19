@@ -68,13 +68,12 @@ from tqdm import trange
 #Automatic analysis
 steps = 2000
 episodes=1000
-ns =[5,10,15,20,25,30,35]
+ns =[5,8,10,12,15,20,25,30,35]
 vel_RLhive =[]
 print('number of suckers analysed:', ns)
 for n_suckers in ns:
     print('learning for tentacle with '+str(n_suckers)+' suckers\n')
     env = Environment(n_suckers,sim_shape,t_position,omega=0.1,carrierMode=carrierMode,isOverdamped=True)
-    env.equilibrate(1000)
     Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True) 
     state = env.get_state()
     print("lr =",Q.lr)
@@ -95,6 +94,12 @@ for n_suckers in ns:
     print("lr =",Q.lr)
     print("epsilon =", Q.epsilon) 
     print(Q.get_value())
+    env.reset()
+    env.equilibrate(1000)
+    state=env.get_state()
+    for k in range(20000):
+        action = Q.get_onPolicy_action(state)
+        state,reward,terminal  = env.step(action)
     vel_RLhive.append(env.get_averageVel())
     print("average_vel =",vel_RLhive[-1])
 
