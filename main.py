@@ -66,13 +66,15 @@ t_position = 41
 
 from tqdm import trange
 #Automatic analysis
-steps = 4000
+steps = 3000
 episodes=1000
+print("steps x episode:", steps)
 ns =[5,8,10,12,15,20,25,30,35]
 vel_RLhive =[]
 print('number of suckers analysed:', ns)
 for n_suckers in ns:
-    print('learning for tentacle with '+str(n_suckers)+' suckers\n')
+    print("**********\n")
+    print('\n\nLearning for tentacle with '+str(n_suckers)+' suckers\n')
     env = Environment(n_suckers,sim_shape,t_position,omega=0.1,carrierMode=carrierMode,isOverdamped=True)
     Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True) 
     state = env.get_state()
