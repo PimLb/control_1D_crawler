@@ -9,6 +9,8 @@ gamma = 0.9#discount 0.9 to reflect upon..
 max_epsilon = 0.9
 min_epsilon =0.005
 
+lr_rew = 0.1
+
 stateName =['->|<-','->|->','->|tip','<-|<-','<-|->','<-|tip','base|<-','base|->']
 stateMap_base = {('base',0):'base|<-',('base',1):'base|->'}
 stateMap_tip = {(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
@@ -36,6 +38,9 @@ class actionValue(object):
         self.epsilon = max_epsilon
         self.lr = max_lr
         self.discount = gamma
+
+        self.old_avRew = 0
+        self.lr_rew = lr_rew
 
         scheduling_steps = total_episodes - int(total_episodes/4) #total_episodes
         print("scheduling steps =", scheduling_steps)
@@ -164,6 +169,10 @@ class actionValue(object):
         #     j = interpret_binary(action)
             
         return i,j
+    def get_avReward(self,current_reward):
+        av_rew = self.old_avRew + self.lr_rew*(current_reward-self.old_avRew)
+        self.old_avRew = av_rew
+        return av_rew
     def _update_Q_parallel(self,newstate,state,action,reward):
         '''
         Update the Q function, return new action.
@@ -171,6 +180,7 @@ class actionValue(object):
         Conceptually it's still multiagent for how the states
         have been defined
         '''
+        av_reward = self.get_avReward(reward)
         for  k in range(self._nAgents):
             # s_new,_a_new = self._get_index(newstate[k]) 
             # s_old,a_old = self._get_index(oldstate[k],action[k])
@@ -180,19 +190,20 @@ class actionValue(object):
             # print(old_action)
             new_state = newstate[k]
             # print(new_state)
-            self._Q[old_state][old_action] += self.lr* (reward + gamma * np.amax(self._Q[new_state]) - self._Q[old_state][old_action])
+            self._Q[old_state][old_action] += self.lr* (reward  - av_reward + np.amax(self._Q[new_state]) - self._Q[old_state][old_action])
 
         
 
     def _update_Q_single(self,newstate,state,action,reward):
         #update each agent Q
+        av_reward = self.get_avReward(reward)
         for  k in range(self._nAgents):
             # s_new,_a_new = self._get_index(newstate[k]) 
             # s_old,a_old = self._get_index(oldstate[k],action[k])Q.
             old_state = state[k]
             old_action = action[k]
             new_state = newstate[k]
-            self._Q[k][old_state][old_action] += self.lr* (reward + gamma * np.amax(self._Q[k][new_state]) - self._Q[k][old_state][old_action])
+            self._Q[k][old_state][old_action] += self.lr* (reward  - av_reward +  np.amax(self._Q[k][new_state]) - self._Q[k][old_state][old_action])
 
             #This could be more efficient but applicable only in this case
             # if np.random.random() < (1 - self.epsilon):
