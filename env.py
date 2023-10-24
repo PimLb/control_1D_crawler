@@ -698,10 +698,10 @@ class   Environment(object):
 
         #ALTERNATIVE: only give -1 reward for backward and make wall reachable in training.. (so that less negative reward if episode ends)
        
-        if vel>0:
-            reward = vel #to promote higher speed..
-        else:
-            reward = -1
+        # if vel>0:
+        reward = vel #to promote higher speed..
+        # else:
+        #     reward = -1
         
         if touching[-1]:
             print(touching)
