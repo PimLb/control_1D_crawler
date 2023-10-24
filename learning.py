@@ -3,13 +3,13 @@ from globals import *
 import numpy as np
 # import copy 
 
-max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.001 # was 0.05 then 0.01, for hive 0.0025
+max_lr = 0.1    # was 0.3 learning rate
+min_lr = 0.0001 # was 0.05 then 0.01, for hive 0.0025
 gamma = 0.9#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.005
+min_epsilon =0#0.01
 
-lr_rew = 0.1
+lr_rew = 0.01
 
 stateName =['->|<-','->|->','->|tip','<-|<-','<-|->','<-|tip','base|<-','base|->']
 stateMap_base = {('base',0):'base|<-',('base',1):'base|->'}
@@ -27,22 +27,26 @@ def interpret_thernary(s:tuple):
 def make_binary(index:int):
     return [int(i) for i in bin(index)[2:]]
 
+
+
 class actionValue(object):
     def __init__(self,learning_space:tuple,nAgents,total_episodes,hiveUpdate = True) -> None:
+        print("\nAverage reward learning setting\n")
         self._state_space = learning_space[0]
         self._action_space = learning_space[1]
         self._state_space_dim = len(self._state_space)
         self._action_dim = len(self._action_space)
         self.dim = (len(self._state_space),len(self._action_space))
         self._nAgents = nAgents
+
         self.epsilon = max_epsilon
         self.lr = max_lr
         self.discount = gamma
 
-        self.old_avRew = 0
+        self.avRew = 0
         self.lr_rew = lr_rew
 
-        scheduling_steps = total_episodes - int(total_episodes/4) #total_episodes
+        scheduling_steps = total_episodes#total_episodes - int(total_episodes/4) #total_episodes
         print("scheduling steps =", scheduling_steps)
         print("greedy steps =", total_episodes - scheduling_steps)
         self._greedySteps = total_episodes - scheduling_steps
@@ -170,8 +174,13 @@ class actionValue(object):
             
         return i,j
     def get_avReward(self,current_reward):
-        av_rew = self.old_avRew + self.lr_rew*(current_reward-self.old_avRew)
-        self.old_avRew = av_rew
+        av_rew = self.avRew + self.lr_rew*(current_reward-self.avRew)
+        # self.old_avRew = av_rew
+        #ATTENZIONE: according to sutton book, average reward is the one obtained while following a certain policy..
+        #So I think if I'm doing scheduling, I should re-initialize average at each episode..
+        #alternative
+        #av_rew = cumulRew/len(cumulRew) re-initialized at each episode
+        #
         return av_rew
     def _update_Q_parallel(self,newstate,state,action,reward):
         '''
@@ -180,7 +189,6 @@ class actionValue(object):
         Conceptually it's still multiagent for how the states
         have been defined
         '''
-        av_reward = self.get_avReward(reward)
         for  k in range(self._nAgents):
             # s_new,_a_new = self._get_index(newstate[k]) 
             # s_old,a_old = self._get_index(oldstate[k],action[k])
@@ -190,27 +198,23 @@ class actionValue(object):
             # print(old_action)
             new_state = newstate[k]
             # print(new_state)
-            self._Q[old_state][old_action] += self.lr* (reward  - av_reward + np.amax(self._Q[new_state]) - self._Q[old_state][old_action])
+            self._Q[old_state][old_action] += self.lr* (reward  - self.avRew + np.amax(self._Q[new_state]) - self._Q[old_state][old_action])
+        self.avRew  = self.get_avReward(reward)
 
         
 
     def _update_Q_single(self,newstate,state,action,reward):
         #update each agent Q
-        av_reward = self.get_avReward(reward)
+        
         for  k in range(self._nAgents):
             # s_new,_a_new = self._get_index(newstate[k]) 
             # s_old,a_old = self._get_index(oldstate[k],action[k])Q.
             old_state = state[k]
             old_action = action[k]
             new_state = newstate[k]
-            self._Q[k][old_state][old_action] += self.lr* (reward  - av_reward +  np.amax(self._Q[k][new_state]) - self._Q[k][old_state][old_action])
-
-            #This could be more efficient but applicable only in this case
-            # if np.random.random() < (1 - self.epsilon):
-            #     newaction.append(np.argmax(self._Q[k][s_new]))
-            # else:
-            #     newaction.append(np.random.randint(0,  self.action_space))
-        #NOT IMPLEMENTED --> (need one for each Q) UPDATE OBSERVABLES
+            self._Q[k][old_state][old_action] += self.lr* (reward  - self.avRew +  np.amax(self._Q[k][new_state]) - self._Q[k][old_state][old_action])
+        self.avRew = self.get_avReward(reward)
+        
     
     def _get_action_hiveUpdate(self,state):
         new_action = []
@@ -246,12 +250,20 @@ class actionValue(object):
         self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
 
+        if self.epsilon == self.scheduled_epsilon[self.n_episodes-1]:
+            pass
+        else:
+            self.avRew = 0 #reinitialize average reward under the current policy (?)
+            #NOT sure in any case Q learning is off-policy
+
         #UPDATE OBSERVABLES (costly)
+        self.update_counters()
+        
+        
+    def update_counters(self):
         self._value.append(self.get_value())
         self._av_value.append(self.get_av_value())
-        self._convergence.append(self._get_diff())
-        
-        
+        self._convergence.append(self._get_diff())  
     
     def get_onPolicy_action(self,state):
         if self._multiAgent:
