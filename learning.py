@@ -5,7 +5,7 @@ import numpy as np
 
 max_lr = 0.1# was 0.3 learning rate
 min_lr = 0.001 # was 0.05 then 0.01, for hive 0.0025
-gamma = 0.9#discount 0.9 to reflect upon..
+gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
 min_epsilon =0.005
 
