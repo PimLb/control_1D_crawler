@@ -110,8 +110,8 @@ print(vel_RLhive)
 
 
 # NOT HIVE PROTOCOL
-
-steps = 6000
+print("NOT HIVE UPDATE")
+steps = 5000
 episodes=1000
 print("steps x episode:", steps)
 ns =[3,5,8,10,15,20,30]
@@ -149,6 +149,6 @@ for n_suckers in ns:
         action = Q.get_onPolicy_action(state)
         state,reward,terminal  = env.step(action)
     vel_RL_noHive.append(env.get_averageVel())
-    print("average_vel =",vel_RLhive[-1])
+    print("average_vel =",vel_RL_noHive[-1])
 
 print(vel_RL_noHive)
