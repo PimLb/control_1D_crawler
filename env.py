@@ -35,9 +35,11 @@ np.seterr(invalid='ignore')
 
 #PHYSICAL PARAMETERS
 #scaling --> keep zeta =1 and k same order of zeta, k = zeta
-tentacle_length = 30
+# tentacle_length = 30
 zeta = 1
 elastic_constant = 1 
+
+x0Fraction = 5
 
 mass = 10 # mass < 0,1 overdamped limit
 
@@ -45,7 +47,7 @@ mass = 10 # mass < 0,1 overdamped limit
 
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
-dt = 0.2
+dt = 0.1
 
 #NEW: ASSUME k and zeta same order both in overdamped and damped
 
@@ -274,14 +276,15 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude,exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length=30,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
         
 
         x0 = tentacle_length/(n_suckers)
-        amplitude = x0/10.
+        self.tentacle_length = tentacle_length
+        amplitude = x0/x0Fraction
         self.x0 = x0
         self.amplitude=amplitude
         print('INFINITE TENTACLE')
@@ -401,8 +404,9 @@ class   Environment(object):
     @omega.setter
     def omega(self,omega):
         self._omega = omega
-        alpha = math.atan(self._omega*self._nsuckers**2/(2*np.pi))
-        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *self.amplitude * math.cos(alpha)
+        k = 2*np.pi/self._nsuckers
+        alpha = math.atan(self._omega/(k*k))
+        self._phase_velocity = omega/k *self.amplitude * math.cos(alpha)
         print("Optimal analitical velocity OVERDAMPED= ", self._phase_velocity)
 
     def reset(self,equilibrate=False,exploringStarts = False,fps = FPS):

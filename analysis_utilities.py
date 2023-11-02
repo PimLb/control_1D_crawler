@@ -1,37 +1,55 @@
-#Contains accessory funcitons used for testing, comparing, plotting ecc
-# More of a workbook note
-
+#MISTERY: I need a 2pi correction to make things work better
 import numpy as np
 
 # 1D utilities for tentacle locomotion
 zeta = 1
 elastic_constant = 1 
 carrierMode = 1
-x0Fraction = 10
-tentacle_length = 30
+x0Fraction = 5
+# tentacle_length = 30
+discretization = 0.0001
 
 def u0_cont(t:float,s:float,N:int,omega,optimalShift,carrierMode=1) -> float:
         '''
         N = number of suckers
         '''
-        amplitude = tentacle_length/(N*x0Fraction)
+        # amplitude = tentacle_length/(N*x0Fraction)
         # the k dependent term mimics some time delay in the propagation 
         wavelengthFraction = carrierMode
         # print (wavelengthFraction)
-        k = 2*np.pi*wavelengthFraction/(N) #N*x0 but aslo is s*x0 so they simplify out
+        k = 2*np.pi/N #N*x0 but aslo is s*x0 so they simplify out
         # diffusion = elastic_constant/zeta
         # alpha = math.atan(omega*x0*x0/(diffusion*k*k))
-        alpha=0 #appears also in equation for  pulse
-        alpha = np.arctan(omega*N*N/(2*np.pi))
+        # alpha=0 #appears also in equation for  pulse
+        alpha = np.arctan(2*np.pi*omega/(k*k))#with a 2pi correction it works much better
+        # alpha = np.arctan(omega*N*N/(4*np.pi*np.pi)) Actual paper formula
         # print(alpha)
         # A = amplitude/k * np.cos(alpha)#USELESS SINCE IS JUST A SCALING INDEPENDENT FROM S
         A=1
-        return A*np.cos(omega*t - k*s +alpha - optimalShift),A
+        return A*np.cos(omega*t - k*(s) +alpha - optimalShift),A
 
+def l0_cont(t:float,s:float,N:int,tentacle_length,omega=0.1,carrierMode=1) -> float:
+        '''
+        N = number of suckers
+        '''
+        amplitude = tentacle_length/(N*x0Fraction)
+        wavelengthFraction = carrierMode
+        k = 2*np.pi*wavelengthFraction/(N) #N*x0 but aslo is s*x0 so they simplify out
+        A=amplitude
+        A=1
+        return A*np.cos(omega*t - k*s ),A
+
+def plot_l0(t,N_suckers,omega,followSuck=5):
+    tlength = N_suckers
+    s = np.arange(1,tlength,discretization)
+    l,amplitude = l0_cont(t,s,N_suckers,omega)
+    peak_ind = np.where(abs(l-amplitude)<=0.00001)
+    ind = np.where(abs(s-followSuck)<=0.00001)
+    return s,l,ind
 def plot_Optimalpulse(t,N_suckers,omega):
     # fig.clear()
-    tlength = N_suckers #[0-->N_sucker-1 included]
-    s = np.arange(1,tlength,0.0001)
+    # tlength = N_suckers #[0-->N_sucker includes also virtual sucker]
+    s = np.arange(0,N_suckers-1,0.0001)
     l,max = u0_cont(t,s,N_suckers,omega,optimalShift=2*np.pi/2)
     target = max
     # fig.plot(s,l)
@@ -42,22 +60,23 @@ def plot_Optimalpulse(t,N_suckers,omega):
     try:
         p = pulse[0][0]
     except:
-        p=-1
+        p=0
         pulse=-1
-    
+    # print(p)
     # if pulse[0].size>0:
     # sucker = np.rint(s[pulse][0])#closer one
     
     sucker = np.rint(s[p])#closer one
     # print(s[p],sucker)
-    if sucker==N_suckers:
-         sucker =0
-         # Virtual sucker N-->base
     # print(sucker)
+    # if sucker==N_suckers:
+    #      sucker =0
+         # Virtual sucker N-->base
+    
     # fig.plot(s[pulse],l[pulse],'o')
     plot_peaks = s[pulse],l[pulse]
     plot_peak2= s[p],l[p]
-    return int(sucker),plot,plot_peaks,p
+    return int(sucker),plot,p
     # else:
     #     plot_peak=s[-1],l[-1]
     #     print(l)
@@ -67,39 +86,66 @@ def plot_Optimalpulse(t,N_suckers,omega):
 def plot_Optimalpulse2(t,N_suckers,omega):
     #true reference function the above is to spot precisely the shift 3/2pi
     # fig.clear()
-    tlength = N_suckers #[0-->8]
-    s = np.arange(1,tlength,0.0001)
+    # tlength = N_suckers #[0-->8]
+
+    s = np.arange(0,N_suckers-1,0.0001)
     l,max = u0_cont(t,s,N_suckers,omega,optimalShift=3*np.pi/2)
     target = 0
     # fig.plot(s,l)
     plot = s,l
     # pulse = np.where(abs(l-(amplitude+x0))<=0.001)
-    pulse = np.where(abs(l-target)<=0.001)
-    # print(pulse[0])
-    try:
-        p = pulse[0][-1]
-    except:
-        p=-1
-        pulse=-1
+    # pulse = np.where(abs(l-target)<=0.001)
+    # # print(pulse[0])
+    # try:
+    #     p = pulse[0][-1]
+    # except:
+    #     p=-1
+    #     pulse=-1
 
-    # if pulse[0].size>0:
-    # sucker = np.rint(s[pulse][0])#closer one
-    sucker = np.rint(s[p])#closer one
-    # print(sucker)
-    # fig.plot(s[pulse],l[pulse],'o')
-    plot_peak = s[pulse],l[pulse]
-    plot_peak2= s[p],l[p]
-    return int(sucker),plot,plot_peak,plot_peak2
-
-
-def anal_vel(n,omega=0.1):
-    amplitude = tentacle_length/(n*x0Fraction)
-    alpha = np.arctan(omega*n*n/(2*np.pi))
-    print(alpha,np.cos(alpha))
-    return omega*n*carrierMode/(2*np.pi) *amplitude * np.cos(alpha)
+    # # if pulse[0].size>0:
+    # # sucker = np.rint(s[pulse][0])#closer one
+    # sucker = np.rint(s[p])#closer one
+    # # print(sucker)
+    # # fig.plot(s[pulse],l[pulse],'o')
+    # plot_peak = s[pulse],l[pulse]
+    # plot_peak2= s[p],l[p]
+    return plot
 
 
+def anal_vel(n,tentacle_length,omega=0.1):
+    phase_vel = omega/(2*np.pi) *tentacle_length
 
+    amplitude_fraction =1./x0Fraction
+    k = 2*np.pi/(n)
+    alpha = np.arctan(2*np.pi*omega/(k*k))
+    reducedOmega = 2*np.pi*omega/(k*k)
+    cos_alpha = 1/(np.sqrt(1+reducedOmega*reducedOmega))
+    # print(alpha,np.cos(alpha))
+    return phase_vel * amplitude_fraction * cos_alpha#omega*n*carrierMode/(2*np.pi) *amplitude * np.cos(alpha)
+
+def anal_vel_Ltnorm(n,omega=0.1):
+    phase_vel = omega/(2*np.pi) 
+
+    amplitude_fraction =1./x0Fraction
+    k = 2*np.pi/(n)
+    alpha = np.arctan(2*np.pi*omega/(k*k))
+    reducedOmega = 2*np.pi*omega/(k*k)
+    cos_alpha = 1/(np.sqrt(1+reducedOmega*reducedOmega))
+    # print(alpha,np.cos(alpha))
+    return phase_vel * amplitude_fraction * cos_alpha
+
+# for n_suckers in ns:
+#     print("\n\nNSUCKERS= ",n_suckers)
+#     print("\n\nNSUCKERS= ",n_suckers)
+#     env = Environment(n_suckers,sim_shape,t_position, carrierMode = 1,omega=0.1,isOverdamped=True)
+#     env.equilibrate(1000)
+#     for k in range(20000):
+#         action = [0]*n_suckers
+#         s_id,plot,ind=plot_Optimalpulse(env._t,env._nsuckers,env.omega)
+#         action[s_id]=1
+#         env.step(action)
+#     print("\nAverage vel= ",env.get_averageVel())
+#     semi_anal_vel_finite100.append(env.get_averageVel())
 # for k in range(1000):
 #     ...:      ...:     action = [0]*n_suckers
 #     ...:      ...:     s_id,plot,plot_peak,ind=plot_Optimalpulse(env._t,env._nsu
