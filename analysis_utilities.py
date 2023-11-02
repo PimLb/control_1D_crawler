@@ -57,7 +57,7 @@ def plot_Optimalpulse(t,N_suckers,omega):
     # fig.plot(s[pulse],l[pulse],'o')
     plot_peaks = s[pulse],l[pulse]
     plot_peak2= s[p],l[p]
-    return int(sucker),plot,plot_peaks,plot_peak2
+    return int(sucker),plot,plot_peaks,p
     # else:
     #     plot_peak=s[-1],l[-1]
     #     print(l)
@@ -68,13 +68,13 @@ def plot_Optimalpulse2(t,N_suckers,omega):
     #true reference function the above is to spot precisely the shift 3/2pi
     # fig.clear()
     tlength = N_suckers #[0-->8]
-    s = np.arange(1,tlength,0.001)
+    s = np.arange(1,tlength,0.0001)
     l,max = u0_cont(t,s,N_suckers,omega,optimalShift=3*np.pi/2)
     target = 0
     # fig.plot(s,l)
     plot = s,l
     # pulse = np.where(abs(l-(amplitude+x0))<=0.001)
-    pulse = np.where(abs(l-target)<=0.005)
+    pulse = np.where(abs(l-target)<=0.001)
     # print(pulse[0])
     try:
         p = pulse[0][-1]
@@ -97,3 +97,25 @@ def anal_vel(n,omega=0.1):
     alpha = np.arctan(omega*n*n/(2*np.pi))
     print(alpha,np.cos(alpha))
     return omega*n*carrierMode/(2*np.pi) *amplitude * np.cos(alpha)
+
+
+
+# for k in range(1000):
+#     ...:      ...:     action = [0]*n_suckers
+#     ...:      ...:     s_id,plot,plot_peak,ind=plot_Optimalpulse(env._t,env._nsu
+#     ...: ckers,env.omega)
+#     ...:      ...:     s_id_2,plot_2,plot_peak_2,plot_peak2_2=plot_Optimalpulse2
+#     ...: (env._t,env._nsuckers,env.omega)
+#     ...:      ...:     action[s_id]=1
+#     ...:      ...:     #print(ind)
+#     ...:      ...:     env.step(action)
+#     ...:      ...:     if k%10==0:
+#     ...:      ...:         fig.clear()
+#     ...:      ...:         fig.plot(plot[0],plot[1])
+#     ...:      ...:         fig.plot(plot_2[0],plot_2[1])
+#     ...:      ...:         #fig.plot(plot_peak[0],plot_peak[1],'o')
+#     ...:      ...:         fig.plot(plot[0][ind],plot[1][ind],'o')
+#     ...:      ...:         fig.plot(plot_2[0][ind],plot_2[1][ind],'o')#fig.plot(
+#     ...: plot_peak2_2[0],plot_peak2_2[1],'o')
+#     ...:      ...:         plt.pause(0.001)
+#     ...:      ...:         env.render()
