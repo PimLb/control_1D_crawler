@@ -35,13 +35,13 @@ np.seterr(invalid='ignore')
 
 #PHYSICAL PARAMETERS
 #scaling --> keep zeta =1 and k same order of zeta, k = zeta
-tentacle_length = 30
+
 zeta = 1
 elastic_constant = 1 
 
 mass = 10 # mass < 0,1 overdamped limit
 
-
+x0Fraction = 4
 
 
 
@@ -276,23 +276,31 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
         
         x0 = tentacle_length/n_suckers
-        amplitude = x0/10.
+        amplitude = x0/x0Fraction
         self.x0 = x0
         self.amplitude = amplitude
+        self.N = n_suckers
+        self.wavelength = self.N*self.x0
+        self._nsuckers=n_suckers
+        self.omega = omega 
+        self.tentacle_length = tentacle_length
         print("FINITE TENTACLE")
-        print(x0,amplitude)
+        print('x0\tamplitude\twavelength\ttentacle length')
+        print('%.3f\t%.4f\t\t%.1f\t\t%.2f'%(x0,amplitude,self.wavelength,tentacle_length))
+        print('n suckers\tperiodicity')
+        print("%d\t%d"%(self._nsuckers,self.N))
+        
         self.isMultiagent = is_multiagent
         self._isOverdamped = isOverdamped
 
         self.carrierMode = carrierMode
-        self._nsuckers=n_suckers
-        self.omega = omega 
+        
        
         print("Carrier modes= ",carrierMode)
         box = Box(sim_shape)
@@ -405,9 +413,12 @@ class   Environment(object):
     @omega.setter
     def omega(self,omega):
         self._omega = omega
-        alpha = math.atan(self._omega*self._nsuckers**2/(2*np.pi))
-        self._phase_velocity = omega*self._nsuckers*self.carrierMode/(2*math.pi) *self.amplitude * math.cos(alpha)
-        print("Optmsl analitical velocity OVERDAMPED= ", self._phase_velocity)
+        k = 2*np.pi/self.N
+        vp = omega/k
+        #CAREFULL if carrier mode not 1 needs correction
+        alpha = math.atan(self._omega/(k*k))
+        vCMtheory = vp*self.amplitude*math.cos(alpha)
+        print("Optimal analitical velocity periodic tentacle OVERDAMPED= ", vCMtheory)
 
     def reset(self,equilibrate = False,exploringStarts = False,fps = FPS):
 
@@ -472,19 +483,37 @@ class   Environment(object):
         for k in range(steps):
             self.step(action)
         self._vel = []
+        self._nsteps = 0
+        self._telapsed =[]
+        self._tip_positions = []
+        self._CM_position = []
+        self._length =[]
+        self._telapsed.append(self._t)
+        self._CM_position.append(self.get_CM())
+        self._length.append(self.get_tentacle_length())
+
+        self._tip_positions.append(self.get_tip())
     
     def l0(self,t:float,k:int) -> float:
         '''
         N = number of suckers
         '''
         # the k dependent term mimics some time delay in the propagation 
-        wavelengthFraction = self.carrierMode
-        N = self._nsuckers
         # print (wavelengthFraction)
         # print(x0,amplitude)
-        return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
+        return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi/self.N * (k+1))
     
     
+    def get_state_singelAgent(self,clusterSize =5):
+        """
+        BAsed on number of suckers included, different combinations of states. 
+        Plus the base and tip which together constitute 4 states
+        """
+        #todo count 2 with base and tip, which by default must be included to have easier combinations 
+        # (have to consider all combinations of 4 states x sucker +4states base and tip together)
+        #
+        return
+
     def get_state(self):
         '''
             3 states per agent depending on tension state of neighboring springs:
