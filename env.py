@@ -39,7 +39,7 @@ np.seterr(invalid='ignore')
 zeta = 1
 elastic_constant = 1 
 
-x0Fraction = 5
+x0Fraction = 4
 
 mass = 10 # mass < 0,1 overdamped limit
 
@@ -47,7 +47,7 @@ mass = 10 # mass < 0,1 overdamped limit
 
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
-dt = 0.1
+dt = 0.2
 
 #NEW: ASSUME k and zeta same order both in overdamped and damped
 
@@ -276,7 +276,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude,exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length=30,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length=10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
@@ -287,15 +287,21 @@ class   Environment(object):
         amplitude = x0/x0Fraction
         self.x0 = x0
         self.amplitude=amplitude
-        print('INFINITE TENTACLE')
-        print(x0,amplitude)
+        self.N = n_suckers
+        self.wavelength = self.x0*self.N
+        self._nsuckers=n_suckers
+        print('PERIODIC TENTACLE')
+        print('x0\tamplitude\twavelength\ttentacle length')
+        print('%.3f\t%.4f\t\t%.1f\t\t%.2f'%(x0,amplitude,self.wavelength,tentacle_length))
+        print('n suckers\tperiodicity')
+        print("%d\t%d"%(self._nsuckers,self.N))
 
 
         self.isMultiagent = is_multiagent
         self._isOverdamped = isOverdamped
 
         self.carrierMode = carrierMode
-        self._nsuckers=n_suckers
+        
         self.omega = omega 
        
         print("Carrier modes= ",carrierMode)
@@ -404,10 +410,10 @@ class   Environment(object):
     @omega.setter
     def omega(self,omega):
         self._omega = omega
-        k = 2*np.pi/self._nsuckers
+        k = 2*np.pi/self.N
         alpha = math.atan(self._omega/(k*k))
-        self._phase_velocity = omega/k *self.amplitude * math.cos(alpha)
-        print("Optimal analitical velocity OVERDAMPED= ", self._phase_velocity)
+        theoretical_vel = omega/k *self.amplitude * math.cos(alpha)
+        print("Optimal analitical velocity OVERDAMPED= ", theoretical_vel)
 
     def reset(self,equilibrate=False,exploringStarts = False,fps = FPS):
 
@@ -472,17 +478,25 @@ class   Environment(object):
         for k in range(steps):
             self.step(action)
         self._vel = []
+        self._nsteps = 0
+        self._telapsed =[]
+        self._tip_positions = []
+        self._CM_position = []
+        self._length =[]
+        self._telapsed.append(self._t)
+        self._CM_position.append(self.get_CM())
+        self._length.append(self.get_tentacle_length())
+
+        self._tip_positions.append(self.get_tip())
     
     def l0(self,t:float,k:int) -> float:
         '''
         N = number of suckers
         '''
         # the k dependent term mimics some time delay in the propagation 
-        wavelengthFraction = self.carrierMode
-        N = self._nsuckers
         # print (wavelengthFraction)
         # print(x0,amplitude)
-        return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi*wavelengthFraction/N * (k+1))
+        return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi/self.N * (k+1))
     
     
     def get_state(self):
@@ -723,9 +737,9 @@ class   Environment(object):
         else:
             reward = -1
         
-        if touching[-1]:
-            print(touching)
-            terminal = True
+        # if touching[-1]:
+        #     print(touching)
+        #     terminal = True
             # reward = 0
             # reward = (self._episodeSteps - self._nsteps) * self.get_averageVel()
             # # reward = self.get_averageVel() * self._box.boundary[0]/self._phase_velocity
