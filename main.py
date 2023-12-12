@@ -67,8 +67,9 @@ t_position = 41
 from tqdm import trange
 #Automatic analysis
 
-# steps = 3000
-# episodes=1000
+# steps = 2000
+# episodes=3000
+# print("episodes:", episodes)
 # print("steps x episode:", steps)
 # ns =[3,5,8,10,12,15,20,25,30,35]
 # vel_RLhive =[]
@@ -112,8 +113,9 @@ from tqdm import trange
 
 # NOT HIVE PROTOCOL
 print("NOT HIVE UPDATE")
-steps = 6000
+steps = 10000
 episodes=1000
+print("episodes:", episodes)
 print("steps x episode:", steps)
 ns =[15,20]
 vel_RL_noHive =[]

@@ -276,7 +276,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True, controlClusterSize = 5): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
@@ -321,12 +321,6 @@ class   Environment(object):
         self._agents.extend(build_tentacle(n_suckers,box,self.l0,self.x0,self.amplitude)) #doing so self.universe mirrors the content
 
         
-
-        if is_multiagent:
-            self._nagents = n_suckers
-            print("**Multiagent**")
-        else:
-            self._nagents = 1
         if self._isOverdamped:
             print("OVERDAMPED DYNAMICS")
             self.step=self._stepOverdamped
@@ -379,6 +373,8 @@ class   Environment(object):
 
 
         if is_multiagent == True:
+            self._nagents = n_suckers
+            print("**Multiagent**")
             # self.action_space = 2 # sucker can turn on friction or turn it off
             # self.state_space = 8#4
             self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
@@ -386,9 +382,17 @@ class   Environment(object):
             self.state_space = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
             self.state_space_dim = 8
         else:
-            #OBSOLETE
+            if controlClusterSize< 2:
+                raise ValueError("minimum control center size (ganglia?) must be 2 (corresponding to a 3 suckers finite tentacle)")
+            self.controlClusterSize = controlClusterSize #minimum is 2 --> 3 suckers tentacle
             self.action_space = np.power(2,n_suckers)
-            self.state_space = np.power(8,n_suckers)# np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
+            self.state_space = np.power(4,controlClusterSize) # eg. ns =5 tip and base one state, --> 4 states array
+            self._nagents = int((n_suckers - 1)/controlClusterSize)
+            if ((n_suckers - 1)%controlClusterSize) != 0:
+                raise ValueError("number of suckers cannot be contained an integer amount of times in the control center")
+            #here base and tip are a single state where left is the compression state of the tip and rigth the compression state of the base.
+            #The convention is that the first position in the state array is the base,tip state
+            #This is then converted in a base 4 number
 
     @property
     def isOverdamped(self):
@@ -504,7 +508,7 @@ class   Environment(object):
         return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi/self.N * (k+1))
     
     
-    def get_state_singelAgent(self,clusterSize =5):
+    def get_state_controlCluster(self):
         """
         BAsed on number of suckers included, different combinations of states. 
         Plus the base and tip which together constitute 4 states
@@ -512,6 +516,15 @@ class   Environment(object):
         #todo count 2 with base and tip, which by default must be included to have easier combinations 
         # (have to consider all combinations of 4 states x sucker +4states base and tip together)
         #
+        states = self.get_state()
+        #need to reinterpret base and tip as a single state
+        states[0] = [states[0][1],states[:-1][0]]
+        states.pop() #remove "tip", which is now described within index 0 state
+
+        
+        return interpret_quaternary(states)
+
+
         return
 
     def get_state(self):
@@ -608,37 +621,37 @@ class   Environment(object):
     #     state = self.get_state()
     #     return [ ( "elongated" if s[0]==1 else "compressed" if s[0]==0 else "base" , "elongated" if s[1] ==1 else "compressed" if s[1]==0 else "tip") for s in state]
 
-    def get_stateDebug(self):
-        #BASE
-        states = []
-        dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
-        right_tension = dright-self.l0(self._t,0)
-        states.append((2,right_tension))
+    # def get_stateDebug(self):
+    #     #BASE
+    #     states = []
+    #     dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
+    #     right_tension = dright-self.l0(self._t,0)
+    #     states.append((2,right_tension))
 
 
-        #Intermediate suckers
-        # for k in range(1,self._nsuckers-1):
-        for sucker in self._agents[1:self._nsuckers-1]:
-            #more compact boundary enforcing
-            k = sucker._id
-            pright = sucker.rightNeighbor.position
-            pleft = sucker.leftNeighbor.position
-            dright = -sucker.position + pright
-            if dright<0:
-                dright +=  self._box.boundary
-            right_tension = dright-self.l0(self._t,k)  #negative argument = pushing left (compressed)
-            dleft = sucker.position - pleft
-            if dleft<0:
-                dleft += self._box.boundary
-            left_tension = dleft-self.l0(self._t,k-1) #negative argument = pushing right (compressed)
-            states.append((left_tension,right_tension))
+    #     #Intermediate suckers
+    #     # for k in range(1,self._nsuckers-1):
+    #     for sucker in self._agents[1:self._nsuckers-1]:
+    #         #more compact boundary enforcing
+    #         k = sucker._id
+    #         pright = sucker.rightNeighbor.position
+    #         pleft = sucker.leftNeighbor.position
+    #         dright = -sucker.position + pright
+    #         if dright<0:
+    #             dright +=  self._box.boundary
+    #         right_tension = dright-self.l0(self._t,k)  #negative argument = pushing left (compressed)
+    #         dleft = sucker.position - pleft
+    #         if dleft<0:
+    #             dleft += self._box.boundary
+    #         left_tension = dleft-self.l0(self._t,k-1) #negative argument = pushing right (compressed)
+    #         states.append((left_tension,right_tension))
 
-        #TIP
-        dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
-        left_tension = dleft-self.l0(self._t,self._nsuckers-1-1)
-        states.append((left_tension,2))
+    #     #TIP
+    #     dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
+    #     left_tension = dleft-self.l0(self._t,self._nsuckers-1-1)
+    #     states.append((left_tension,2))
 
-        return states
+    #     return states
 
     def get_tip(self):
         return self._agents[-1].position[0]
@@ -793,6 +806,15 @@ class   Environment(object):
 
 
         return  newState,reward,terminal 
+
+    def _stepOverdamped_ganglia(self,action):
+        '''
+        Input action is in this case a binary number per control center which is translated in an action per sucker.
+        Basically, here the translation happens, and thereafter the usual _stepOverdamped() method is called.
+        '''
+
+        #Working in progress.. here the difficulty is to include scenarios with several control centers  = clustered multiagent 
+
 
     def _stepOverdamped(self,action):
         '''

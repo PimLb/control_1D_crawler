@@ -4,7 +4,7 @@ import numpy as np
 # import copy 
 
 max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
+min_lr = 0.0025# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
 min_epsilon =0.001
@@ -15,11 +15,7 @@ stateMap_tip = {(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
 stateMap_intermediate = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}
 actionState=[' not anchoring',' anchoring']
 
-def interpret_binary(s:tuple):
-    return int("".join(str(ele) for ele in s), 2)
 
-def interpret_thernary(s:tuple):
-    return int("".join(str(ele) for ele in s), 3)
 
 
 def make_binary(index:int):

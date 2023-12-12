@@ -13,3 +13,12 @@ import random
 import math
 import pygame
 import copy 
+
+def interpret_binary(s:tuple):
+    return int("".join(str(ele) for ele in s), 2)
+
+def interpret_thernary(s:tuple):
+    return int("".join(str(ele) for ele in s), 3)
+
+def interpret_quaternary(s:tuple):
+    return int("".join(str(ele) for ele in s), 4)
