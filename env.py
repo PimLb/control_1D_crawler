@@ -540,16 +540,16 @@ class   Environment(object):
         # self._agents[0]._position_old = self._agents[0].position.copy()
         # self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
         
-        pright = self._agents[0].rightNeighbor.position
-        pleft = self._agents[self._nsuckers].leftNeighbor.position #virtual sucker neighbor
-        dright = -self._agents[0].position + pright #ok
+        pright = self._agents[0].rightNeighbor._abslutePosition
+        pleft = self._agents[self._nsuckers].leftNeighbor._abslutePosition #virtual sucker neighbor
+        dright = -self._agents[0]._abslutePosition + pright #ok
         
-        if dright<0:
-            dright +=  self._box.boundary
+        # if dright<0:
+        #     dright +=  self._box.boundary
         right_tension = sign0(dright-self.l0(self._t,0))
-        dleft = self._agents[self._nsuckers].position - pleft
-        if dleft<0:
-            dleft += self._box.boundary
+        dleft = self._agents[self._nsuckers]._abslutePosition - pleft
+        # if dleft<0:
+        #     dleft += self._box.boundary
         left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1))
         states.append(self.state_space[(left_tension,right_tension)])
         self._agents[0]._position_old = self._agents[0].position.copy()
@@ -559,15 +559,15 @@ class   Environment(object):
         for sucker in self._agents[1:self._nsuckers]:
             #more compact boundary enforcing
             k = sucker._id
-            pright = sucker.rightNeighbor.position
-            pleft = sucker.leftNeighbor.position
-            dright = -sucker.position + pright
-            if dright<0:
-                dright +=  self._box.boundary
+            pright = sucker.rightNeighbor._abslutePosition
+            pleft = sucker.leftNeighbor._abslutePosition
+            dright = -sucker._abslutePosition + pright
+            # if dright<0:
+            #     dright +=  self._box.boundary
             right_tension = sign0(dright-self.l0(self._t,k))  #negative argument = pushing left (compressed)
-            dleft = sucker.position - pleft
-            if dleft<0:
-                dleft += self._box.boundary
+            dleft = sucker._abslutePosition - pleft
+            # if dleft<0:
+            #     dleft += self._box.boundary
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
             # print((left_tension,right_tension))
             states.append(self.state_space[(left_tension,right_tension)])
@@ -577,6 +577,7 @@ class   Environment(object):
             sucker._abslutePosition_old = sucker._abslutePosition.copy()
         # #for the evolution of the virtual sucker
         self._agents[self._nsuckers]._position_old = self._agents[self._nsuckers].position.copy()
+        self._agents[self._nsuckers]._abslutePosition_old = self._agents[self._nsuckers]._abslutePosition.copy()
         
         # #TIP
         # dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
@@ -829,21 +830,23 @@ class   Environment(object):
 
         #VIRTUAL SUCKER INDEX = nsucker
 
-        pright = self._agents[0].rightNeighbor._position_old
-        dist = pright -self._agents[0]._position_old
-        if dist<0:
-            # old_dist = dist.copy()
-            dist += self._box.boundary
+        pright = self._agents[0].rightNeighbor._abslutePosition_old
+        dist = pright -self._agents[0]._abslutePosition_old
+        # if dist<0:
+        #     # old_dist = dist.copy()
+        #     dist += self._box.boundary
         right_force = (dist  - self.l0(self._t,0))
-        pleft = self._agents[self._nsuckers].leftNeighbor._position_old #virtual sucker
-        dist = self._agents[self._nsuckers]._position_old -pleft
-        if dist<0:
-            dist+=self._box.boundary
+        pleft = self._agents[self._nsuckers].leftNeighbor._abslutePosition_old #virtual sucker
+        dist = self._agents[self._nsuckers]._abslutePosition_old -pleft
+        # if dist<0:
+        #     dist+=self._box.boundary
         left_force = -(dist - self.l0(self._t,self._nsuckers-1))
         inst_vel_boundary = right_force + left_force
         delta_x=self.deltaT * inst_vel_boundary
         if action[0] == 0 :#and action[self._nsuckers-1]==0:
             #virtual sucker-base evolves feeling same forces of base
+            self._agents[0]._abslutePosition = self._agents[0]._abslutePosition_old + delta_x
+            self._agents[self._nsuckers]._abslutePosition = self._agents[self._nsuckers]._abslutePosition_old + delta_x
             self._agents[0].position = self._agents[0]._position_old + delta_x
             self._agents[self._nsuckers].position = self._agents[self._nsuckers]._position_old + delta_x
         
@@ -858,18 +861,18 @@ class   Environment(object):
             if action[k] == 1:  
                 pass #Do nothing.. position unchanged
             else:
-                pleft = sucker.leftNeighbor._position_old.copy()
-                pright = sucker.rightNeighbor._position_old.copy()
-                me = sucker._position_old.copy()
+                pleft = sucker.leftNeighbor._abslutePosition_old.copy()
+                pright = sucker.rightNeighbor._abslutePosition_old.copy()
+                me = sucker._abslutePosition_old.copy()
 
                 dist =  pright -me
-                if dist<0:
-                    dist+=self._box.boundary
+                # if dist<0:
+                #     dist+=self._box.boundary
                 right_force = (dist  - self.l0(self._t,k))
 
                 dist = me - pleft
-                if dist<0:
-                    dist+=self._box.boundary
+                # if dist<0:
+                #     dist+=self._box.boundary
                 left_force = -(dist - self.l0(self._t,k-1))
 
                 inst_vel = right_force + left_force
