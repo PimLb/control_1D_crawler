@@ -47,7 +47,7 @@ x0Fraction = 4
 
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
-dt = 0.1
+dt = 0.2
 
 #NEW: ASSUME k and zeta same order both in overdamped and damped
 
@@ -296,7 +296,9 @@ class   Environment(object):
         print('n suckers\tperiodicity')
         print("%d\t%d"%(self._nsuckers,self.N))
         
-        self.isMultiagent = is_multiagent
+        self.isMultiagent = is_multiagent #need to characterize type of state returned..
+
+        
         self._isOverdamped = isOverdamped
 
         self.carrierMode = carrierMode
@@ -312,13 +314,13 @@ class   Environment(object):
         # self._episodeSteps = totalSteps
         self._episode = 1
         self._universe = {"agents":[],"target":[]}
-        self._agents = self._universe["agents"]
+        self._suckers = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.append(np.array([t_position]))
         # if np.any([self._tposition[k]>=b for k,b in enumerate(self._box.boundary.values())]):
         # if np.any([self._tposition>=self._box.boundary]):
         #     raise ValueError("Target out of simulation box!")
-        self._agents.extend(build_tentacle(n_suckers,box,self.l0,self.x0,self.amplitude)) #doing so self.universe mirrors the content
+        self._suckers.extend(build_tentacle(n_suckers,box,self.l0,self.x0,self.amplitude)) #doing so self.universe mirrors the content
 
         
         if self._isOverdamped:
@@ -329,7 +331,7 @@ class   Environment(object):
         else:
             print("NON OVERDAMPED:")
             print("m/zeta = ",mass/zeta)
-            for sucker in self._agents:
+            for sucker in self._suckers:
                 sucker._acceleration_old = self._get_acceleration(sucker)
             self.step = self._stepDamped
             # self.deltaT = dt/2.
@@ -373,26 +375,31 @@ class   Environment(object):
 
 
         if is_multiagent == True:
-            self._nagents = n_suckers
+            # self._nagents = n_suckers
+            self.get_state=self._get_state_multiagent
             print("**Multiagent**")
             # self.action_space = 2 # sucker can turn on friction or turn it off
             # self.state_space = 8#4
-            self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
-            self.action_space_dim = 2
-            self.state_space = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
-            self.state_space_dim = 8
+            self.action_space_name = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
+            self.action_space= 2
+            self.state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
+            self.state_space = 8
         else:
             if controlClusterSize< 2:
-                raise ValueError("minimum control center size (ganglia?) must be 2 (corresponding to a 3 suckers finite tentacle)")
+                raise ValueError("minimum control center size (number of springs) must be 2 (corresponding to a 3 suckers finite tentacle)")
+            self.get_staet = self._get_state_controlCluster
             self.controlClusterSize = controlClusterSize #minimum is 2 --> 3 suckers tentacle
             self.action_space = np.power(2,n_suckers)
-            self.state_space = np.power(4,controlClusterSize) # eg. ns =5 tip and base one state, --> 4 states array
-            self._nagents = int((n_suckers - 1)/controlClusterSize)
+            self.state_space = np.power(2,controlClusterSize) # eg. ns =5, 4  springs --> 4 digit binary number to represent state
+            self.action_space_name = {1:'anchoring', 0:'not anchoring'}
+            self.state_space_name = {1:'elongated', 0:'compressed'}
+            # self._nagents = int((n_suckers - 1)/controlClusterSize)
+            self._nGanglia = int((n_suckers - 1)/controlClusterSize)
             if ((n_suckers - 1)%controlClusterSize) != 0:
-                raise ValueError("number of suckers cannot be contained an integer amount of times in the control center")
-            #here base and tip are a single state where left is the compression state of the tip and rigth the compression state of the base.
-            #The convention is that the first position in the state array is the base,tip state
-            #This is then converted in a base 4 number
+                raise ValueError("number of springs cannot be contained an integer amount of times in the control center. Choose another ganglia size!")
+            print("Number of ganglia: ",self._nGanglia)
+            #states here become spring states. Which are binary: either elongated or compressed
+            #therefore there is a straigthforward conveersion into a binary mapping
 
     @property
     def isOverdamped(self):
@@ -427,16 +434,16 @@ class   Environment(object):
     def reset(self,equilibrate = False,exploringStarts = False,fps = FPS):
 
         #maybe useless. I'm afraid of memory leaks..
-        for s in self._agents:
+        for s in self._suckers:
             del s
 
         
         t_position = self._tposition#keep same target
         self._universe = {"agents":[],"target":[]}
-        self._agents = self._universe["agents"]
+        self._suckers = self._universe["agents"]
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
-        self._agents.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,self.amplitude,exploringStarts=exploringStarts))
+        self._suckers.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,self.amplitude,exploringStarts=exploringStarts))
 
         if equilibrate:
             self.equilibrate(1000)
@@ -463,12 +470,12 @@ class   Environment(object):
         if fps != FPS:
             self.window = None
         if not self._isOverdamped:
-            for sucker in self._agents:
+            for sucker in self._suckers:
                 sucker._acceleration_old = self._get_acceleration(sucker)
         
     def reset_partial(self):
         #To reduce memory consumption for continuous problem
-        for s in self._agents:
+        for s in self._suckers:
             del s
 
         self._nsteps = 0
@@ -508,96 +515,81 @@ class   Environment(object):
         return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi/self.N * (k+1))
     
     
-    def get_state_controlCluster(self):
+    def _get_state_controlCluster(self):
         """
-        BAsed on number of suckers included, different combinations of states. 
-        Plus the base and tip which together constitute 4 states
+        Here the states are represented by the compression state of each spring, therefore 2 states per spring.
+        The whole state can be easily interpreted in binary code
         """
-        #todo count 2 with base and tip, which by default must be included to have easier combinations 
-        # (have to consider all combinations of 4 states x sucker +4states base and tip together)
+        
         #
-        states = self.get_state()
-        #need to reinterpret base and tip as a single state
-        states[0] = [states[0][1],states[:-1][0]]
-        states.pop() #remove "tip", which is now described within index 0 state
-
+        # states = self.get_state_base()
+        # #need to reinterpret base and tip as a single state
+        # states[0] = [states[0][1],states[:-1][0]]
+        # states.pop() #remove "tip", which is now described within index 0 state
         
-        return interpret_quaternary(states)
+        #0 compressed, 1 elongated
+        clustered_springs = []
+        for i in self._nGanglia:
+            springs = []
+            for sucker in  self._suckers[i*self.controlClusterSize:(i+1)*self.controlClusterSize]:
+                k = sucker._id
+                pright = sucker.rightNeighbor._abslutePosition
+                dright =  pright -sucker._abslutePosition
+                right_tension = sign0(dright-self.l0(self._t,k)) # 0 = negative right force --> compressed
+                springs.append(right_tension)
+            clustered_springs.append(springs)
 
+        return clustered_springs
 
-        return
-
-    def get_state(self):
+    def _get_state_multiagent(self):
         '''
-            3 states per agent depending on tension state of neighboring springs:
-                states: 0(-1) =  compressed; 1 = elongated, 2 = none
-            4 out of eigth can be realized only by tip and base for the definitions given.
+            4 states for intermediary suckers, 2 for tip and base
         '''
-         #returns the state of the sistem and can be framed single agent or multiagent
-        # multiagent = self.isMultiagent
-
-        #EFFICIENCY CONSIDERATIONS:
-        # Since the tentacle is an ordered list there's no need to store pointer to neighbor TODO
-        # Many ifs can be avoided by treating explicitly base and tip OK
-        #Ways to avoid ifs when e forcing boundaries? --> Easier: keep track of absolute positions always
-        
-        #BOUNDARY CONDITIONS CONSIDERATIONS
-        # When setting positions after step is taken, boundaries are enforced
-        # Therefore distances must be checked (in case base for instance appears on the other side of the box)
-
-        #NEW:
-        # 3 STATES per sucker 2^3 states
-        #states: 0(-1) =  compressed; 1 = elongated, 2 = none
-        #thernary index code: e.g.(2,0)=6, (2,1)=7, (1,0)=3, (1,1) = 4
-        # indexes populated by tip: (0,2) = 2, (1,2) = 5 (expect here action?)
-        # indexes populated by base: (2,0) = 6 (expect here action?), (2,1) = 7
-        # indexes populated by intermediate suckers: (0,0) = 0, (0,1) = 1,(1,0)=3 (expect here action),(1,1)=4
-
 
         #BASE
         states = []
-        dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
-        if dright<0:
-            # print('here state',dright)
-            dright +=  self._box.boundary
+        dright = -self._suckers[0]._abslutePosition +self._suckers[0].rightNeighbor._abslutePosition
+        # if dright<0:
+        #     # print('here state',dright)
+        #     dright +=  self._box.boundary
             # print(dright)
         right_tension = sign0(dright-self.l0(self._t,0))
-        states.append(self.state_space[('base',right_tension)])
+        states.append(self.state_space_name[('base',right_tension)])
 
         #update old posiiton
-        self._agents[0]._position_old = self._agents[0].position.copy()
-        self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
+        self._suckers[0]._position_old = self._suckers[0].position.copy()
+        self._suckers[0]._abslutePosition_old = self._suckers[0]._abslutePosition.copy()
         #Intermediate suckers
         # for k in range(1,self._nsuckers-1):
-        for sucker in self._agents[1:self._nsuckers-1]:
+        for sucker in self._suckers[1:self._nsuckers-1]:
             #more compact boundary enforcing
             k = sucker._id
-            pright = sucker.rightNeighbor.position
-            pleft = sucker.leftNeighbor.position
-            dright = -sucker.position + pright
-            if dright<0:
-                dright +=  self._box.boundary
+            pright = sucker.rightNeighbor._abslutePosition
+            pleft = sucker.leftNeighbor._abslutePosition
+            dright = -sucker._abslutePosition + pright
+            # if dright<0:
+            #     dright +=  self._box.boundary
             right_tension = sign0(dright-self.l0(self._t,k))  #negative argument = pushing left (compressed)
-            dleft = sucker.position - pleft
-            if dleft<0:
-                dleft += self._box.boundary
+            dleft = sucker._abslutePosition - pleft
+            # if dleft<0:
+            #     dleft += self._box.boundary
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
-            states.append(self.state_space[(left_tension,right_tension)])
+            states.append(self.state_space_name[(left_tension,right_tension)])
 
             #update old posiitons
             sucker._position_old = sucker.position.copy()
             sucker._abslutePosition_old = sucker._abslutePosition.copy()
 
         #TIP
-        dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
-        if dleft<0:
-            dleft += self._box.boundary
+        dleft = self._suckers[self._nsuckers-1]._abslutePosition - self._suckers[self._nsuckers-1].leftNeighbor._abslutePosition
+        # if dleft<0:
+        #     dleft += self._box.boundary
         left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-2))
-        states.append(self.state_space[(left_tension,'tip')])
+        states.append(self.state_space_name[(left_tension,'tip')])
 
         #update old posiiton
-        self._agents[self._nsuckers-1]._position_old=self._agents[self._nsuckers-1].position.copy()
-        self._agents[self._nsuckers-1]._abslutePosition_old = self._agents[self._nsuckers-1]._abslutePosition.copy()
+        self._suckers[self._nsuckers-1]._position_old=self._suckers[self._nsuckers-1].position.copy()
+        self._suckers[self._nsuckers-1]._abslutePosition_old = self._suckers[self._nsuckers-1]._abslutePosition.copy()
 
 
         # if multiagent:
@@ -654,10 +646,10 @@ class   Environment(object):
     #     return states
 
     def get_tip(self):
-        return self._agents[-1].position[0]
+        return self._suckers[-1].position[0]
     
     def get_CM(self):
-        return np.average([a._abslutePosition for a in self._agents])
+        return np.average([a._abslutePosition for a in self._suckers])
         #return 0.5*(self._agents[0].position+self._agents[-1].position)
 
     def get_instVel(self):
@@ -672,7 +664,7 @@ class   Environment(object):
         return np.average(self._vel)
 
     def get_tentacle_length(self):
-        return (self._agents[-1]._abslutePosition[0]-self._agents[0]._abslutePosition[0])
+        return (self._suckers[-1]._abslutePosition[0]-self._suckers[0]._abslutePosition[0])
 
     def get_observation(self):
         '''returns a human readable observation (position of each sucker)'''
@@ -723,7 +715,7 @@ class   Environment(object):
 
         #TERMINAL CONDITION
         terminal = False 
-        touching = [(abs(a.position - self._tposition[0])<= minDistance)[0] for a in self._agents]
+        touching = [(abs(a.position - self._tposition[0])<= minDistance)[0] for a in self._suckers]
 
 
         #CM BASED
@@ -768,7 +760,7 @@ class   Environment(object):
         #TODO treat explicitly base and tip for efficiency
 
         #raise NameError ("Non overdamped dynamics is not implemented ")
-        for sucker in self._agents: 
+        for sucker in self._suckers: 
             k = sucker._id
             # print(k,action[k])
             sucker.lastAction = action[k]
@@ -807,14 +799,18 @@ class   Environment(object):
 
         return  newState,reward,terminal 
 
-    def _stepOverdamped_ganglia(self,action):
+    def _stepOverdamped_ganglia(self,action_code):
         '''
         Input action is in this case a binary number per control center which is translated in an action per sucker.
         Basically, here the translation happens, and thereafter the usual _stepOverdamped() method is called.
         '''
+        action = []
+        for i in self._nGanglia:
+            action += [make_binary(action_code[i])] # some work needed on the side of Q to translate actions correctly distinguishing case of contraining a single action. In this case I want still the correct correspondence in binary code..
+        return self._stepOverdamped(action)
 
         #Working in progress.. here the difficulty is to include scenarios with several control centers  = clustered multiagent 
-
+        
 
     def _stepOverdamped(self,action):
         '''
@@ -852,40 +848,40 @@ class   Environment(object):
         # print("here")
 
         if action[0] == 0:
-            pright = self._agents[0].rightNeighbor._position_old
-            dist = pright -self._agents[0]._position_old
-            if dist<0:
-                # old_dist = dist.copy()
-                dist += self._box.boundary
+            pright = self._suckers[0].rightNeighbor._abslutePosition_old
+            dist = pright -self._suckers[0]._abslutePosition_old
+            # if dist<0:
+            #     # old_dist = dist.copy()
+            #     dist += self._box.boundary
                 # print(old_dist,dist)
             inst_vel = (dist  - self.l0(self._t,0))
             delta_x=self.deltaT * inst_vel
-            self._agents[0].position = self._agents[0]._position_old + delta_x
-            self._agents[0]._abslutePosition = self._agents[0]._abslutePosition_old + delta_x
+            self._suckers[0].position = self._suckers[0]._position_old + delta_x
+            self._suckers[0]._abslutePosition = self._suckers[0]._abslutePosition_old + delta_x
         else:
             # if (self._agents[0].rightNeighbor._position -self._agents[0].position)<0:
             #     print("base active ", self._agents[0].position)
             pass
-        self._agents[0].lastAction=action[0]
+        self._suckers[0].lastAction=action[0]
         #INTERMEDIATE
-        for sucker in self._agents[1:self._nsuckers-1]:
+        for sucker in self._suckers[1:self._nsuckers-1]:
             k = sucker._id
             sucker.lastAction = action[k]
             if action[k] == 1:  
                 pass #Do nothing.. position unchanged
             else:
-                pleft = sucker.leftNeighbor._position_old.copy()
-                pright = sucker.rightNeighbor._position_old.copy()
-                me = sucker._position_old.copy()
+                pleft = sucker.leftNeighbor._abslutePosition.copy()
+                pright = sucker.rightNeighbor._abslutePosition.copy()
+                me = sucker._abslutePosition_old.copy()
 
                 dist =  pright -me
-                if dist<0:
-                    dist+=self._box.boundary
+                # if dist<0:
+                #     dist+=self._box.boundary
                 right_force = (dist  - self.l0(self._t,k))
 
                 dist = me - pleft
-                if dist<0:
-                    dist+=self._box.boundary
+                # if dist<0:
+                #     dist+=self._box.boundary
                 left_force = -(dist - self.l0(self._t,k-1))
 
                 inst_vel = right_force + left_force
@@ -904,17 +900,17 @@ class   Environment(object):
                 sucker._abslutePosition = sucker._abslutePosition_old + delta_x#here by setter method includes boundaries
         #TIP
         if action[self._nsuckers-1] == 0:
-            pleft = self._agents[self._nsuckers-1].leftNeighbor._position_old
-            dist = self._agents[self._nsuckers-1]._position_old -pleft
-            if dist<0:
-                dist+=self._box.boundary
+            pleft = self._suckers[self._nsuckers-1].leftNeighbor._abslutePosition_old
+            dist = self._suckers[self._nsuckers-1]._abslutePosition_old -pleft
+            # if dist<0:
+            #     dist+=self._box.boundary
             inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
             delta_x = self.deltaT * inst_vel
-            self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1]._position_old + delta_x
-            self._agents[self._nsuckers-1]._abslutePosition = self._agents[self._nsuckers-1]._abslutePosition_old + delta_x
+            self._suckers[self._nsuckers-1].position = self._suckers[self._nsuckers-1]._position_old + delta_x
+            self._suckers[self._nsuckers-1]._abslutePosition = self._suckers[self._nsuckers-1]._abslutePosition_old + delta_x
         else:
             pass
-        self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
+        self._suckers[self._nsuckers-1].lastAction=action[self._nsuckers-1]
 
 
         #REWARD AND TERMINAL STATE
@@ -1074,8 +1070,8 @@ class   Environment(object):
 #         # Now we draw the agent
 #         # loop on all suckers
             n = 0
-            nagents = self._nagents
-            for agent in self._agents:
+            nagents = self._nsuckers
+            for agent in self._suckers:
                 n +=1
                 a = agent.position
                 if agent.lastAction == 0:

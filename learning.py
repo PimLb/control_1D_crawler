@@ -4,7 +4,7 @@ import numpy as np
 # import copy 
 
 max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.0025# was 0.05 then 0.01, for hive 0.0025
+min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
 min_epsilon =0.001
@@ -18,17 +18,17 @@ actionState=[' not anchoring',' anchoring']
 
 
 
-def make_binary(index:int):
-    return [int(i) for i in bin(index)[2:]]
+
 
 class actionValue(object):
-    def __init__(self,learning_space:tuple,nAgents,total_episodes,hiveUpdate = True) -> None:
-        self._state_space = learning_space[0]
-        self._action_space = learning_space[1]
-        self._state_space_dim = len(self._state_space)
-        self._action_dim = len(self._action_space)
-        self.dim = (len(self._state_space),len(self._action_space))
-        self._nAgents = nAgents
+    def __init__(self,learning_space:tuple,nSuckers,total_episodes,is_multiAgent=True,hiveUpdate = True,nGanglia = 1,singleActionConstraint = False) -> None:
+        # self._state_space = learning_space[0]
+        # self._action_space = learning_space[1]
+        # self._state_space_dim = len(self._state_space)
+        # self._action_dim = len(self._action_space)
+        self.state_space_dim = learning_space[0]
+        self.action_space_dim = learning_space[1]
+        # self.dim = learning_space
         self.epsilon = max_epsilon
         self.lr = max_lr
         self.discount = gamma
@@ -46,18 +46,21 @@ class actionValue(object):
         self.scheduled_lr = [max_lr-self._upgrade_lr*i for i in range(scheduling_steps)] + [min_lr] * (total_episodes-scheduling_steps)
 
         # print(len(self.scheduled_epsilon))
-        if nAgents>1:
+        if is_multiAgent:
             self._multiAgent = True
+            self._nAgents = nSuckers
             if hiveUpdate:
                 self._parallelUpdate = True
                 print("\n** HIVE UPDATE **\n")
                 self.update = self._update_Q_parallel
-                self.get_action = self._get_action_hiveUpdate
+                self.get_action = self._get_action
                 Q={}
                 #k could be whatsover even directly the tuple of states
                 #   --> Can drop the interpreter but need a function producing all possible states
-                for k in self._state_space.values():
-                    Q[k] = np.random.random(self.dim[1])
+                stateSpace_all = internal_states+base_states+tip_states
+                print(stateSpace_all)
+                for k in stateSpace_all.values():
+                    Q[k] = np.random.random(self.action_space_dim)
                 # Q = np.random.random(self.dim)
                 self._Q = Q
                 #convergence observables:
@@ -95,7 +98,7 @@ class actionValue(object):
                 # Q[self._state_space[5]] = np.random.random(self.dim[1])
                 base_states = stateMap_base.values()
                 for k in base_states:
-                    Q[k] = np.random.random(self.dim[1])
+                    Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
                 Q={}
@@ -106,7 +109,7 @@ class actionValue(object):
                 # Q[4] = np.random.random(self.dim[1])
                 internal_states = stateMap_intermediate.values()
                 for k in internal_states:
-                    Q[k] = np.random.random(self.dim[1])
+                    Q[k] = np.random.random(self.action_space_dim)
                 for i in range(1,self._nAgents-1):
                     self._Q.append(copy.deepcopy(Q)) 
                     self._oldQ.append(copy.deepcopy(Q))
@@ -115,7 +118,7 @@ class actionValue(object):
                 Q={}
                 tip_states = stateMap_tip.values()
                 for k in tip_states:
-                    Q[k] = np.random.random(self.dim[1])
+                    Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
                 # Q[self._state_space[6]] = np.random.random(self.dim[1])
@@ -134,11 +137,33 @@ class actionValue(object):
 
   
         else:
-            #TODO populate some learning observables..
+            self._parallelUpdate = False
+            print("\n** Control Center (Ganglia) mode\n")
+            print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             self._multiAgent = False
-            self.get_action = self._get_action_singleAgent 
-            self.dim = learning_space #+ (nAgents,) not sure
-    
+            self.update = self._update_Q_ganglia
+            self._Q = []
+            self._oldQ = []
+            Q={}
+            self._nAgents = nGanglia
+            if singleActionConstraint:
+                self.get_action = self._get_action_constrained
+                self._action_space_dim = nSuckers+1
+                for k in range(self._state_space_dim):
+                    Q[k] = np.random.random(self.action_space_dim)
+                for i in self._nAgents:
+                    #1 Q matrix per control center (ganglia)
+                    self._Q.append(copy.deepcopy(Q))
+                    self._oldQ.append(copy.deepcopy(Q))
+            else:
+                self.get_action = self._get_action
+                for k in range(self._state_space_dim):
+                    Q[k] = np.random.random(self.action_space_dim)
+                for i in self._nAgents:
+                    #1 Q matrix per control center (ganglia)
+                    self._Q.append(copy.deepcopy(Q))
+                    self._oldQ.append(copy.deepcopy(Q))
+
         
     # def reset(self):
     #     self.n_episodes = 0
@@ -196,15 +221,18 @@ class actionValue(object):
             # else:
             #     newaction.append(np.random.randint(0,  self.action_space))
         #NOT IMPLEMENTED --> (need one for each Q) UPDATE OBSERVABLES
+    def _update_Q_single_constrained(self,newstate,state,action,reward):
+        action = [interpret_binary(a) for a in action] # need to get back to correct indexing
+        self._update_Q_single(newstate,state,action,reward)
     
-    def _get_action_hiveUpdate(self,state):
+    def _get_action(self,state):
         new_action = []
         for k in range(self._nAgents):
             # sind,_a = self._get_index(s[k])
             if np.random.random() < (1 - self.epsilon):
                 new_action.append(np.argmax(self._Q[state[k]]))
             else:
-                new_action.append(np.random.randint(0,self._action_dim))
+                new_action.append(np.random.randint(0,self.action_space_dim))
         return new_action
     def _get_action_not_hiveUpdate(self,state):
         new_action = []
@@ -213,18 +241,22 @@ class actionValue(object):
             if np.random.random() < (1 - self.epsilon):
                 new_action.append(np.argmax(self._Q[k][state[k]]))
             else:
-                new_action.append(np.random.randint(0,self._action_dim))
+                new_action.append(np.random.randint(0,self.action_space_dim))
         return new_action
-    def _get_action_singleAgent(self,state):
-        #ATTENTION never tested
-        #CHECK again and again
-            if np.random.random() < (1 - self.epsilon):
-                # sind,_a = self._get_index(s)
-                new_action=np.argmax(self._Q[state[k]])
-            else:
-                new_action=np.random.randint(0,self._action_dim)
+    
 
-            return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
+
+    def _get_action_constrained(self,state):
+        '''
+        Converts to index correctly interpretable as binary
+        '''
+        new_action = int(2**(self._get_action(state)-1))
+        return new_action
+
+    # def _get_onPolicy_action_contstrained(self,state):
+    #     new_action = int(2**(self._get_onPolicy_action(state)-1))
+    #     return new_action
+
     
     def makeGreedy(self):
         self.lr = self.scheduled_lr[self.n_episodes]
@@ -239,25 +271,23 @@ class actionValue(object):
         
     
     def get_onPolicy_action(self,state):
-        if self._multiAgent:
-            new_action = []
-            if self._parallelUpdate:
-                for k in range(self._nAgents):
-                    # sind,_a = self._get_index(s[k])
-                    # print(s[k],sind)
-                    new_action.append(np.argmax(self._Q[state[k]]))
-            else:
-                #one Q function for each agent
-                for k in range(self._nAgents):
-                    # sind,_a = self._get_index(s[k])
-                    new_action.append(np.argmax(self._Q[k][state[k]]))
-            return new_action
+        new_action = []
+        # if self._multiAgent:
+        if self._parallelUpdate:
+            for k in range(self._nAgents):
+                # sind,_a = self._get_index(s[k])
+                # print(s[k],sind)
+                new_action.append(np.argmax(self._Q[state[k]]))
         else:
-            #CHECK
-            new_action=np.argmax(self._Q[state[k]])
+            #one Q function for each agent
+            for k in range(self._nAgents):
+                # sind,_a = self._get_index(s[k])
+                new_action.append(np.argmax(self._Q[k][state[k]]))
+            if self.get_action == self._get_action_constrained:
+                new_action = [2**(a-1) for a in new_action]
         
+        return new_action
 
-            return make_binary(new_action) #need to have an instruction to be given to the tentacle (which sucker hangs)
         
     def _get_diff_hive(self):
         diff =[]

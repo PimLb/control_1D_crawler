@@ -20,5 +20,5 @@ def interpret_binary(s:tuple):
 def interpret_thernary(s:tuple):
     return int("".join(str(ele) for ele in s), 3)
 
-def interpret_quaternary(s:tuple):
-    return int("".join(str(ele) for ele in s), 4)
+def make_binary(index:int):
+    return [int(i) for i in bin(index)[2:]]
