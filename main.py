@@ -114,7 +114,7 @@ from tqdm import trange
 # NOT HIVE PROTOCOL
 print("NOT HIVE UPDATE")
 steps = 6000
-episodes=1000
+episodes=1500
 print("episodes:", episodes)
 print("steps x episode:", steps)
 ns =[3,5,8,12,15,20,25]

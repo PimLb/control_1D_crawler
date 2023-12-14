@@ -141,12 +141,12 @@ class actionValue(object):
             print("\n** Control Center (Ganglia) mode\n")
             print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             self._multiAgent = False
-            self.update = self._update_Q_ganglia
             self._Q = []
             self._oldQ = []
             Q={}
             self._nAgents = nGanglia
             if singleActionConstraint:
+                self.update = self._update_Q_single_constrained
                 self.get_action = self._get_action_constrained
                 self._action_space_dim = nSuckers+1
                 for k in range(self._state_space_dim):
@@ -156,6 +156,7 @@ class actionValue(object):
                     self._Q.append(copy.deepcopy(Q))
                     self._oldQ.append(copy.deepcopy(Q))
             else:
+                self.update = self._update_Q_single
                 self.get_action = self._get_action
                 for k in range(self._state_space_dim):
                     Q[k] = np.random.random(self.action_space_dim)
