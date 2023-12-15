@@ -20,5 +20,10 @@ def interpret_binary(s:tuple):
 def interpret_thernary(s:tuple):
     return int("".join(str(ele) for ele in s), 3)
 
-def make_binary(index:int):
-    return [int(i) for i in bin(index)[2:]]
+def make_binary(baseTen_input:int,padding:int):
+    '''
+    Padding adds digits with 0 in front, for a readable action instruction
+    '''
+    binary_num = [int(i) for i in bin(baseTen_input)[2:]]
+    out = [0]*(padding-len(binary_num)) + binary_num
+    return out

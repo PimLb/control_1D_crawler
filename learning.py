@@ -4,7 +4,7 @@ import numpy as np
 # import copy 
 
 max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.0025# was 0.05 then 0.01, for hive 0.0025
+min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
 min_epsilon =0.001
@@ -21,11 +21,12 @@ actionState=[' not anchoring',' anchoring']
 
 
 class actionValue(object):
-    def __init__(self,learning_space:tuple,nSuckers,total_episodes,is_multiAgent=True,hiveUpdate = True,nGanglia = 1,singleActionConstraint = False) -> None:
-        # self._state_space = learning_space[0]
-        # self._action_space = learning_space[1]
-        # self._state_space_dim = len(self._state_space)
-        # self._action_dim = len(self._action_space)
+    def __init__(self,info:dict,total_episodes,hiveUpdate = True, singleActionConstraint = False) -> None:
+        #Learning space a richer container
+        learning_space = info["learning space"]
+        self._nsuckers = info["n suckers"]
+        is_multiAgent = info["multiagent"]
+        
         self.state_space_dim = learning_space[0]
         self.action_space_dim = learning_space[1]
         # self.dim = learning_space
@@ -48,17 +49,20 @@ class actionValue(object):
         # print(len(self.scheduled_epsilon))
         if is_multiAgent:
             self._multiAgent = True
-            self._nAgents = nSuckers
+            self._nAgents = self._nsuckers
+            self.get_onPolicy_action = self._get_onPolicy_action_multiagent
+            
             if hiveUpdate:
                 self._parallelUpdate = True
-                print("\n** HIVE UPDATE **\n")
+                print("\n** <WARNING>:  HIVE UPDATE **\n")
                 self.update = self._update_Q_parallel
-                self.get_action = self._get_action
+                self.get_action = self._get_action_hive
                 Q={}
                 #k could be whatsover even directly the tuple of states
                 #   --> Can drop the interpreter but need a function producing all possible states
-                stateSpace_all = internal_states+base_states+tip_states
-                print(stateSpace_all)
+                
+                stateSpace_all = stateMap_intermediate|stateMap_base|stateMap_tip
+                # print(stateSpace_all)
                 for k in stateSpace_all.values():
                     Q[k] = np.random.random(self.action_space_dim)
                 # Q = np.random.random(self.dim)
@@ -82,9 +86,9 @@ class actionValue(object):
             else:
                 self._parallelUpdate = False 
                 self.update = self._update_Q_single
-                self.get_action = self._get_action_not_hiveUpdate
+                self.get_action = self._get_action_single
                 self._Q = []
-                print("\n** NOT hive update **\n")
+                print("\n** <WARNING>:  NOT HIVE UPDATE **\n")
                 print("A Q matrix per agent")
                 print("(however epsilon, lr and gamma are universal)")
                 self._value =[]
@@ -138,32 +142,41 @@ class actionValue(object):
   
         else:
             self._parallelUpdate = False
-            print("\n** Control Center (Ganglia) mode\n")
-            print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             self._multiAgent = False
+            nGanglia = info["n ganglia"]
+            self._nAgents = nGanglia
+            self.get_onPolicy_action = self._get_onPolicy_action_ganglia
+            # if nGanglia is not None:
+            #     self._nAgents = nGanglia
+            # else:
+            #     raise AttributeError("Please provide number of control centers (ganglia)")
+            print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
+            print("Number of Ganglia = ", self._nAgents)
+            print("Number of springs considered: %d, corresponding to %d states"%(np.sqrt(self.state_space_dim),self.state_space_dim))
+            
+            # print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
+            
+            if singleActionConstraint:
+                print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ACTION AT A TIME **\n")
+                self._singleActionConstraint = True
+                self.update = self._update_Q_ganglia_constrained
+                self.get_action = self._get_action_constrained
+                self.action_space_dim = self._nsuckers+1 #THIS IS THE MAIN FEATURE
+            else:
+                self._singleActionConstraint = False
+                self.update = self._update_Q_ganglia
+                self.get_action = self._get_action_ganglia
             self._Q = []
             self._oldQ = []
             Q={}
-            self._nAgents = nGanglia
-            if singleActionConstraint:
-                self.update = self._update_Q_single_constrained
-                self.get_action = self._get_action_constrained
-                self._action_space_dim = nSuckers+1
-                for k in range(self._state_space_dim):
-                    Q[k] = np.random.random(self.action_space_dim)
-                for i in self._nAgents:
-                    #1 Q matrix per control center (ganglia)
-                    self._Q.append(copy.deepcopy(Q))
-                    self._oldQ.append(copy.deepcopy(Q))
-            else:
-                self.update = self._update_Q_single
-                self.get_action = self._get_action
-                for k in range(self._state_space_dim):
-                    Q[k] = np.random.random(self.action_space_dim)
-                for i in self._nAgents:
-                    #1 Q matrix per control center (ganglia)
-                    self._Q.append(copy.deepcopy(Q))
-                    self._oldQ.append(copy.deepcopy(Q))
+            for k in range(self.state_space_dim):
+                Q[k] = np.random.random(self.action_space_dim)
+            for i in range(self._nAgents):
+                #1 Q matrix per control center (ganglia)
+                self._Q.append(copy.deepcopy(Q))
+                self._oldQ.append(copy.deepcopy(Q))
+            
+            print("possible actions combitations %d, for a total of %d suckers."%(self.action_space_dim,self._nsuckers))
 
         
     # def reset(self):
@@ -189,7 +202,7 @@ class actionValue(object):
     def _update_Q_parallel(self,newstate,state,action,reward):
         '''
         Update the Q function, return new action.
-        Single Q which is updated by all agents.
+        Single Q which is updated by all agents (HIVE UPDATE).
         Conceptually it's still multiagent for how the states
         have been defined
         '''
@@ -207,6 +220,9 @@ class actionValue(object):
         
 
     def _update_Q_single(self,newstate,state,action,reward):
+        '''
+        1 Q matrix per agent. Each sucker-agent can develop an original policy.
+        '''
         #update each agent Q
         for  k in range(self._nAgents):
             # s_new,_a_new = self._get_index(newstate[k]) 
@@ -222,11 +238,21 @@ class actionValue(object):
             # else:
             #     newaction.append(np.random.randint(0,  self.action_space))
         #NOT IMPLEMENTED --> (need one for each Q) UPDATE OBSERVABLES
-    def _update_Q_single_constrained(self,newstate,state,action,reward):
-        action = [interpret_binary(a) for a in action] # need to get back to correct indexing
-        self._update_Q_single(newstate,state,action,reward)
     
-    def _get_action(self,state):
+
+    def _update_Q_ganglia(self,newstate,state,action,reward):
+        '''
+        Identical to Q single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs)
+        '''
+        encoded_newstate = [interpret_binary(s) for s in newstate]
+        encoded_oldstate = [interpret_binary(s) for s in state]
+        self._update_Q_single(encoded_newstate,encoded_oldstate,action,reward)
+        
+    def _update_Q_ganglia_constrained(self,newstate,state,action,reward):
+        action = [interpret_binary(a) for a in action] # need to get back to correct indexing
+        self._update_Q_ganglia(newstate,state,action,reward)
+
+    def _get_action_hive(self,state):
         new_action = []
         for k in range(self._nAgents):
             # sind,_a = self._get_index(s[k])
@@ -235,7 +261,8 @@ class actionValue(object):
             else:
                 new_action.append(np.random.randint(0,self.action_space_dim))
         return new_action
-    def _get_action_not_hiveUpdate(self,state):
+    
+    def _get_action_single(self,state):
         new_action = []
         for k in range(self._nAgents):
             # sind,_a = self._get_index(s[k])
@@ -245,13 +272,29 @@ class actionValue(object):
                 new_action.append(np.random.randint(0,self.action_space_dim))
         return new_action
     
+    def _get_action_ganglia(self,state):
+        '''
+        Identical to action single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs)
+        '''
+        
+        encoded_state = [interpret_binary(s) for s in state]
+        # print(encoded_state)
+        new_action = self._get_action_single(encoded_state)
+        decoded_newaction=[]
+        for i in range(self._nAgents):
+            decoded_newaction += make_binary(new_action[i],self._nsuckers)
+
+        return decoded_newaction
+    
 
 
     def _get_action_constrained(self,state):
         '''
         Converts to index correctly interpretable as binary
         '''
-        new_action = int(2**(self._get_action(state)-1))
+        encoded_state = [interpret_binary(s) for s in state]
+        new_action = [make_binary(int(2**(a-1)),self._nsuckers) for a in self._get_action_single(encoded_state)]
+       
         return new_action
 
     # def _get_onPolicy_action_contstrained(self,state):
@@ -271,7 +314,7 @@ class actionValue(object):
         
         
     
-    def get_onPolicy_action(self,state):
+    def _get_onPolicy_action_multiagent(self,state):
         new_action = []
         # if self._multiAgent:
         if self._parallelUpdate:
@@ -284,10 +327,22 @@ class actionValue(object):
             for k in range(self._nAgents):
                 # sind,_a = self._get_index(s[k])
                 new_action.append(np.argmax(self._Q[k][state[k]]))
-            if self.get_action == self._get_action_constrained:
-                new_action = [2**(a-1) for a in new_action]
         
         return new_action
+    
+    def _get_onPolicy_action_ganglia(self,state):
+        encoded_state = [interpret_binary(s) for s in state]
+        new_action = []
+        for k in range(self._nAgents):
+                # sind,_a = self._get_index(s[k])
+                # print(s[k],sind)
+                new_action+=make_binary(np.argmax(self._Q[k][encoded_state[k]]),self._nsuckers)
+        
+        if self._singleActionConstraint:
+            new_action = [2**(a-1) for a in new_action]
+        
+        return new_action
+    
 
         
     def _get_diff_hive(self):

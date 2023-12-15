@@ -276,7 +276,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True, controlClusterSize = 5): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True, controlClusterSize = 4): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
@@ -373,7 +373,7 @@ class   Environment(object):
         self.metadata = { "render_fps": FPS}
         
 
-
+        self.info ={}
         if is_multiagent == True:
             # self._nagents = n_suckers
             self.get_state=self._get_state_multiagent
@@ -387,8 +387,7 @@ class   Environment(object):
         else:
             if controlClusterSize< 2:
                 raise ValueError("minimum control center size (number of springs) must be 2 (corresponding to a 3 suckers finite tentacle)")
-            self.get_staet = self._get_state_controlCluster
-            self.controlClusterSize = controlClusterSize #minimum is 2 --> 3 suckers tentacle
+            self.get_state = self._get_state_controlCluster
             self.action_space = np.power(2,n_suckers)
             self.state_space = np.power(2,controlClusterSize) # eg. ns =5, 4  springs --> 4 digit binary number to represent state
             self.action_space_name = {1:'anchoring', 0:'not anchoring'}
@@ -397,10 +396,16 @@ class   Environment(object):
             self._nGanglia = int((n_suckers - 1)/controlClusterSize)
             if ((n_suckers - 1)%controlClusterSize) != 0:
                 raise ValueError("number of springs cannot be contained an integer amount of times in the control center. Choose another ganglia size!")
+            print("\n**Control centers mode**\n")
             print("Number of ganglia: ",self._nGanglia)
+            self.info["n ganglia"] =  self._nGanglia
+            self.controlClusterSize = controlClusterSize
             #states here become spring states. Which are binary: either elongated or compressed
             #therefore there is a straigthforward conveersion into a binary mapping
 
+        self.info["learning space"]=(self.state_space,self.action_space)
+        self.info["n suckers"]=self._nsuckers
+        self.info["multiagent"] = self.isMultiagent
     @property
     def isOverdamped(self):
         return self._isOverdamped
@@ -529,7 +534,7 @@ class   Environment(object):
         
         #0 compressed, 1 elongated
         clustered_springs = []
-        for i in self._nGanglia:
+        for i in range(self._nGanglia):
             springs = []
             for sucker in  self._suckers[i*self.controlClusterSize:(i+1)*self.controlClusterSize]:
                 k = sucker._id
@@ -799,15 +804,16 @@ class   Environment(object):
 
         return  newState,reward,terminal 
 
-    def _stepOverdamped_ganglia(self,action_code):
-        '''
-        Input action is in this case a binary number per control center which is translated in an action per sucker.
-        Basically, here the translation happens, and thereafter the usual _stepOverdamped() method is called.
-        '''
-        action = []
-        for i in self._nGanglia:
-            action += [make_binary(action_code[i])] # some work needed on the side of Q to translate actions correctly distinguishing case of contraining a single action. In this case I want still the correct correspondence in binary code..
-        return self._stepOverdamped(action)
+    #better to do the decoding on the side of learning
+    # def _stepOverdamped_ganglia(self,action_code):
+    #     '''
+    #     Input action is in this case a binary number per control center which is translated in an action per sucker.
+    #     Basically, here the translation happens, and thereafter the usual _stepOverdamped() method is called.
+    #     '''
+    #     action = []
+    #     for i in self._nGanglia:
+    #         action += [make_binary(action_code[i])] # some work needed on the side of Q to translate actions correctly distinguishing case of contraining a single action. In this case I want still the correct correspondence in binary code..
+    #     return self._stepOverdamped(action)
 
         #Working in progress.. here the difficulty is to include scenarios with several control centers  = clustered multiagent 
         
