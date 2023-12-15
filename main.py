@@ -66,7 +66,7 @@ t_position = 41
 
 from tqdm import trange
 #Automatic analysis
-steps = 5000
+steps = 6000
 episodes=1000
 print("Episodes: ",episodes)
 print("steps x episode:", steps)
