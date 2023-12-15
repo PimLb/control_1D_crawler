@@ -66,65 +66,60 @@ t_position = 41
 
 from tqdm import trange
 #Automatic analysis
-
-# steps = 2000
-# episodes=3000
-# print("episodes:", episodes)
-# print("steps x episode:", steps)
-# ns =[3,5,8,10,12,15,20,25,30,35]
-# vel_RLhive =[]
-# print('number of suckers analysed:', ns)
-# for n_suckers in ns:
-#     print("**********\n")
-#     print('\n\nLearning for tentacle with '+str(n_suckers)+' suckers\n')
-#     env = Environment(n_suckers,sim_shape,t_position,omega=0.1,carrierMode=carrierMode,isOverdamped=True)
-#     Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True) 
-#     state = env.get_state()
-#     print("lr =",Q.lr)
-#     print("epsilon =", Q.epsilon)
-#     for e in trange(episodes):
-#         # if (e%20==0):
-#         #     print(e)
-#         #     print("convergence =", Q.get_conv())
-#         #     print("lr =",Q.lr)
-#         #     print("epsilon =", Q.epsilon)
-#         for k in range(steps):
-#             action = Q.get_action(state)
-#             old_state = state
-#             state,reward,terminal  = env.step(action)
-#             Q.update(state,old_state,action,reward)
-#         Q.makeGreedy() #just for scheduling, not linked to an actual episode
-#         env.reset_partial() #to avoid abuse of memory DOES NOT reset position
-#     print("lr =",Q.lr)
-#     print("epsilon =", Q.epsilon) 
-#     print(Q.get_value())
-#     env.reset()
-#     env.deltaT = 0.1 #for more precision
-#     env.equilibrate(1000)
-#     state=env.get_state()
-#     for k in range(20000):
-#         action = Q.get_onPolicy_action(state)
-#         state,reward,terminal  = env.step(action)
-#     vel_RLhive.append(env.get_averageVel()/env.x0)
-#     print("average_vel =",vel_RLhive[-1])
-
-# print(vel_RLhive)
-# np.savetxt("periodic tentacle_HIVE.txt",np.column_stack((np.array(ns),np.round(vel_RLhive,6))),fmt='%d\t%.6f',header="n suck\tnormVel\t\ttentacle length%d"%env.tentacle_length)
-
-# NOT HIVE PROTOCOL
-print("NOT HIVE UPDATE")
-steps = 6000
-episodes=1500
-print("episodes:", episodes)
+steps = 5000
+episodes=1000
+print("Episodes: ",episodes)
 print("steps x episode:", steps)
-ns =[3,5,8,12,15,20,25]
+print()
+ns =[3,5,8,10,12,15,20,25,30,35]
+vel_RLhive =[]
+print('number of suckers analysed:', ns)
+for n_suckers in ns:
+    print("**********\n")
+    print('\n\nLearning for tentacle with '+str(n_suckers)+' suckers\n')
+    env = Environment(n_suckers,sim_shape,t_position,omega=0.1,carrierMode=carrierMode,isOverdamped=True)
+    Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True) 
+    state = env.get_state()
+    print("lr =",Q.lr)
+    print("epsilon =", Q.epsilon)
+    for e in trange(episodes):
+        for k in range(steps):
+            action = Q.get_action(state)
+            old_state = state
+            state,reward,terminal  = env.step(action)
+            Q.update(state,old_state,action,reward)
+        Q.makeGreedy() #just for scheduling, not linked to an actual episode
+        env.reset_partial() #to avoid abuse of memory DOES NOT reset position
+    print("lr =",Q.lr)
+    print("epsilon =", Q.epsilon) 
+    print(Q.get_value())
+    env.reset()
+    env.deltaT = 0.1 # for higher precision
+    env.equilibrate(1000)
+    state=env.get_state()
+    for k in range(20000):
+        action = Q.get_onPolicy_action(state)
+        state,reward,terminal  = env.step(action)
+    vel_RLhive.append(env.get_averageVel()/env.x0)
+    print("average_vel (normalized)=",vel_RLhive[-1])
+np.savetxt("periodic tentacle_HIVE_dt%.1f.txt"%env.deltaT,np.column_stack((np.array(ns),np.round(vel_RLhive,6))),fmt='%d\t%.6f',header="n suck\tnormVel\t\ttentacle length%d"%env.tentacle_length)
+print(vel_RLhive)
+
+print("NON HIVE UPDATE")
+input("proceed?\n")
+steps = 8000
+episodes=1000
+print("Episodes: ",episodes)
+print("steps x episode:", steps)
+print()
+ns =[3,5,8,10,15,20]
 vel_RL_noHive =[]
 print('number of suckers analysed:', ns)
 for n_suckers in ns:
     print("**********\n")
     print('\n\nLearning for tentacle with '+str(n_suckers)+' suckers\n')
     env = Environment(n_suckers,sim_shape,t_position,omega=0.1,carrierMode=carrierMode,isOverdamped=True)
-    Q =actionValue((env.state_space,env.action_space),nSuckers=env._nsuckers,total_episodes=episodes,hiveUpdate=False) 
+    Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=False) 
     state = env.get_state()
     print("lr =",Q.lr)
     print("epsilon =", Q.epsilon)
@@ -145,14 +140,14 @@ for n_suckers in ns:
     print("epsilon =", Q.epsilon) 
     print(Q.get_value())
     env.reset()
-    env.deltaT = 0.1 #for more precision
+    env.deltaT = 0.1 # for higher precision
     env.equilibrate(1000)
     state=env.get_state()
     for k in range(20000):
         action = Q.get_onPolicy_action(state)
         state,reward,terminal  = env.step(action)
     vel_RL_noHive.append(env.get_averageVel()/env.x0)
-    print("average_vel =",vel_RL_noHive[-1])
+    print("average_vel (normalized)=",vel_RL_noHive[-1])
 
 print(vel_RL_noHive)
-np.savetxt("periodic tentacle_noHIVE.txt",np.column_stack((np.array(ns),np.round(vel_RL_noHive,6))),fmt='%d\t%.6f',header="n suck\tnormVel\t\ttentacle length%d"%env.tentacle_length)
+np.savetxt("periodic tentacle_noHIVEdt%.1f.txt"%env.deltaT,np.column_stack((np.array(ns),np.round(vel_RL_noHive,6))),fmt='%d\t%.6f',header="n suck\tnormVel\t\ttentacle length%d"%env.tentacle_length)
