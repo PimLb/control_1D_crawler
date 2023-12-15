@@ -152,7 +152,7 @@ class actionValue(object):
             #     raise AttributeError("Please provide number of control centers (ganglia)")
             print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
             print("Number of Ganglia = ", self._nAgents)
-            print("Number of springs considered: %d, corresponding to %d states"%(np.sqrt(self.state_space_dim),self.state_space_dim))
+            print("Number of springs per ganglia considered: %d, corresponding to %d states"%(np.sqrt(self.state_space_dim),self.state_space_dim))
             
             # print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             
@@ -282,7 +282,7 @@ class actionValue(object):
         new_action = self._get_action_single(encoded_state)
         decoded_newaction=[]
         for i in range(self._nAgents):
-            decoded_newaction += make_binary(new_action[i],self._nsuckers)
+            decoded_newaction += make_binary(new_action[i],int(self._nsuckers/self._nAgents))
 
         return decoded_newaction
     
@@ -293,9 +293,13 @@ class actionValue(object):
         Converts to index correctly interpretable as binary
         '''
         encoded_state = [interpret_binary(s) for s in state]
-        new_action = [make_binary(int(2**(a-1)),self._nsuckers) for a in self._get_action_single(encoded_state)]
+        new_action = self._get_action_single(encoded_state)
+        decoded_newaction=[]
+        for i in range(self._nAgents):
+            a = new_action[i]
+            decoded_newaction += make_binary(int(2**(a-1)),int(self._nsuckers/self._nAgents)) 
        
-        return new_action
+        return decoded_newaction
 
     # def _get_onPolicy_action_contstrained(self,state):
     #     new_action = int(2**(self._get_onPolicy_action(state)-1))

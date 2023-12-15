@@ -24,6 +24,7 @@ def make_binary(baseTen_input:int,padding:int):
     '''
     Padding adds digits with 0 in front, for a readable action instruction
     '''
+    # print(padding)
     binary_num = [int(i) for i in bin(baseTen_input)[2:]]
     out = [0]*(padding-len(binary_num)) + binary_num
     return out
