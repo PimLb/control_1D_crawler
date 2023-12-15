@@ -107,19 +107,20 @@ from tqdm import trange
 
 print("NON HIVE UPDATE")
 # input("proceed?\n")
-steps = 5000
-episodes=2000
+steps = 8000
+episodes=1000
 print("Episodes: ",episodes)
 print("steps x episode:", steps)
 print()
-ns =[20,25]
+ns =[3,15,20,25]
 vel_RL_noHive =[]
 print('number of suckers analysed:', ns)
 for n_suckers in ns:
     print("**********\n")
     print('\n\nLearning for tentacle with '+str(n_suckers)+' suckers\n')
     env = Environment(n_suckers,sim_shape,t_position,omega=0.1,carrierMode=carrierMode,isOverdamped=True)
-    Q =actionValue((env.state_space,env.action_space),nSuckers=env._nsuckers,total_episodes=episodes,hiveUpdate=False) 
+    # Q =actionValue((env.state_space,env.action_space),nSuckers=env._nsuckers,total_episodes=episodes,hiveUpdate=False) 
+    Q =actionValue(env.info,total_episodes=episodes,hiveUpdate=False) 
     state = env.get_state()
     print("lr =",Q.lr)
     print("epsilon =", Q.epsilon)
