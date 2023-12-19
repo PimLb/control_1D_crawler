@@ -66,7 +66,7 @@ t_position = 41
 
 from tqdm import trange
 #Automatic analysis
-# steps = 5000
+# steps = 6000
 # episodes=1000
 # print("Episodes: ",episodes)
 # print("steps x episode:", steps)
@@ -107,12 +107,12 @@ from tqdm import trange
 
 print("NON HIVE UPDATE")
 # input("proceed?\n")
-steps = 8000
+steps = 6000
 episodes=1000
 print("Episodes: ",episodes)
 print("steps x episode:", steps)
 print()
-ns =[3,15,20,25]
+ns =[3,5,8,10,12,15,20,25]
 vel_RL_noHive =[]
 print('number of suckers analysed:', ns)
 for n_suckers in ns:

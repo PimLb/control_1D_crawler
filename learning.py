@@ -7,7 +7,7 @@ max_lr = 0.1# was 0.3 learning rate
 min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.001
+min_epsilon =0.0025
 
 stateName =['->|<-','->|->','->|tip','<-|<-','<-|->','<-|tip','base|<-','base|->']
 stateMap_base = {('base',0):'base|<-',('base',1):'base|->'}
@@ -15,7 +15,7 @@ stateMap_tip = {(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
 stateMap_intermediate = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}
 actionState=[' not anchoring',' anchoring']
 
-
+#TODO: mange observables for ganglia case.. --> consider only average value
 
 
 
@@ -51,6 +51,7 @@ class actionValue(object):
             self._multiAgent = True
             self._nAgents = self._nsuckers
             self.get_onPolicy_action = self._get_onPolicy_action_multiagent
+            self.makeGreedy = self._makeGreedy_multiagent
             
             if hiveUpdate:
                 self._parallelUpdate = True
@@ -128,9 +129,9 @@ class actionValue(object):
                 # Q[self._state_space[6]] = np.random.random(self.dim[1])
                 # Q[self._state_space[7]] = np.random.random(self.dim[1])
 
-                self.get_value = self._get_value_noHive
-                self.get_av_value = self._get_av_value_noHive
-                self._get_diff = self._get_diff_noHive
+                self.get_value = self._get_value
+                self.get_av_value = self._get_av_value
+                self._get_diff = self._get_diff
                 self._value.append(self.get_value())
                 self._av_value.append(self.get_av_value())
                 #plots
@@ -152,8 +153,12 @@ class actionValue(object):
             #     raise AttributeError("Please provide number of control centers (ganglia)")
             print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
             print("Number of Ganglia = ", self._nAgents)
-            print("Number of springs per ganglia considered: %d, corresponding to %d states"%(np.sqrt(self.state_space_dim),self.state_space_dim))
-            
+            print("Number of springs per ganglion considered: %d, corresponding to %d states"%((self._nsuckers)/self._nAgents-1,self.state_space_dim))
+
+            self.get_value = self._get_value
+            self.get_av_value = self._get_av_value
+            self._get_diff = self._get_diff
+            self.makeGreedy = self._makeGreedy_ganglia
             # print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             
             if singleActionConstraint:
@@ -161,7 +166,8 @@ class actionValue(object):
                 self._singleActionConstraint = True
                 self.update = self._update_Q_ganglia_constrained
                 self.get_action = self._get_action_constrained
-                self.action_space_dim = self._nsuckers+1 #THIS IS THE MAIN FEATURE
+                suckers_perGanglion = int(self._nsuckers/nGanglia)
+                self.action_space_dim = suckers_perGanglion +1 #THIS IS THE MAIN FEATURE OF THIS MODE
             else:
                 self._singleActionConstraint = False
                 self.update = self._update_Q_ganglia
@@ -175,8 +181,9 @@ class actionValue(object):
                 #1 Q matrix per control center (ganglia)
                 self._Q.append(copy.deepcopy(Q))
                 self._oldQ.append(copy.deepcopy(Q))
-            
-            print("possible actions combitations %d, for a total of %d suckers."%(self.action_space_dim,self._nsuckers))
+            self._av_value = []
+            self._av_value.append(self.get_av_value)
+            print("possible actions combitations per ganglion %d, for %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
 
         
     # def reset(self):
@@ -242,17 +249,28 @@ class actionValue(object):
 
     def _update_Q_ganglia(self,newstate,state,action,reward):
         '''
-        Identical to Q single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs)
+        Identical to Q single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs) + encoding of action
         '''
+        action_indexes = [interpret_binary(a) for a in action] # need to get back to correct indexing
         encoded_newstate = [interpret_binary(s) for s in newstate]
         encoded_oldstate = [interpret_binary(s) for s in state]
-        self._update_Q_single(encoded_newstate,encoded_oldstate,action,reward)
+        self._update_Q_single(encoded_newstate,encoded_oldstate,action_indexes,reward)
         
     def _update_Q_ganglia_constrained(self,newstate,state,action,reward):
-        action = [interpret_binary(a) for a in action] # need to get back to correct indexing
-        self._update_Q_ganglia(newstate,state,action,reward)
+        action_indexes = []
+        for i in self._nAgents:
+            try:
+                action_indexes.append(self._nsuckers-action[i].index(1))
+            except ValueError:
+                action_indexes.append(0)
+        encoded_newstate = [interpret_binary(s) for s in newstate]
+        encoded_oldstate = [interpret_binary(s) for s in state]
+        self._update_Q_single(encoded_newstate,encoded_oldstate,action_indexes,reward)
 
+    
     def _get_action_hive(self,state):
+        '''Same Q matrix for each agent.
+        For each agent (sucker or ganglion), outputs the action. Random number re-extracted for each one'''
         new_action = []
         for k in range(self._nAgents):
             # sind,_a = self._get_index(s[k])
@@ -263,6 +281,8 @@ class actionValue(object):
         return new_action
     
     def _get_action_single(self,state):
+        '''One Q matrix per agent.
+        For each agent (sucker or ganglion), outputs the action. Random number re-extracted for each one'''
         new_action = []
         for k in range(self._nAgents):
             # sind,_a = self._get_index(s[k])
@@ -274,7 +294,8 @@ class actionValue(object):
     
     def _get_action_ganglia(self,state):
         '''
-        Identical to action single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs)
+        Identical to action single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs).
+        Finally decoding of action, which from an integer are represented as a base 2 array positionally associated to the sucker.
         '''
         
         encoded_state = [interpret_binary(s) for s in state]
@@ -289,15 +310,11 @@ class actionValue(object):
 
 
     def _get_action_constrained(self,state):
-        '''
-        Converts to index correctly interpretable as binary
-        '''
         encoded_state = [interpret_binary(s) for s in state]
         new_action = self._get_action_single(encoded_state)
         decoded_newaction=[]
         for i in range(self._nAgents):
-            a = new_action[i]
-            decoded_newaction += make_binary(int(2**(a-1)),int(self._nsuckers/self._nAgents)) 
+            decoded_newaction += make_binary(int(2**(new_action[i]-1)),int(self._nsuckers/self._nAgents)) 
        
         return decoded_newaction
 
@@ -306,7 +323,7 @@ class actionValue(object):
     #     return new_action
 
     
-    def makeGreedy(self):
+    def _makeGreedy_multiagent(self):
         self.lr = self.scheduled_lr[self.n_episodes]
         self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
@@ -316,7 +333,15 @@ class actionValue(object):
         self._av_value.append(self.get_av_value())
         self._convergence.append(self._get_diff())
         
+    def _makeGreedy_ganglia(self):
+        self.lr = self.scheduled_lr[self.n_episodes]
+        self.epsilon = self.scheduled_epsilon[self.n_episodes]
+        self.n_episodes+=1
+
+        #UPDATE OBSERVABLES (costly)
         
+        self._av_value.append(self.get_av_value())
+        self._convergence.append(self._get_diff())
     
     def _get_onPolicy_action_multiagent(self,state):
         new_action = []
@@ -337,14 +362,13 @@ class actionValue(object):
     def _get_onPolicy_action_ganglia(self,state):
         encoded_state = [interpret_binary(s) for s in state]
         new_action = []
-        for k in range(self._nAgents):
-                # sind,_a = self._get_index(s[k])
-                # print(s[k],sind)
-                new_action+=make_binary(np.argmax(self._Q[k][encoded_state[k]]),self._nsuckers)
-        
         if self._singleActionConstraint:
-            new_action = [2**(a-1) for a in new_action]
-        
+            new_action +=make_binary(2**np.argmax(self._Q[k][encoded_state[k]])-1,int(self._nsuckers/self._nAgents))
+        else:
+            for k in range(self._nAgents):
+                    # sind,_a = self._get_index(s[k])
+                    # print(s[k],sind)
+                    new_action +=make_binary(np.argmax(self._Q[k][encoded_state[k]]),int(self._nsuckers/self._nAgents))
         return new_action
     
 
@@ -359,11 +383,11 @@ class actionValue(object):
         # self._oldQ = self._Q.copy()
         return np.amax(np.array(diff))
     
-    def _get_diff_noHive(self):
+    def _get_diff(self):
         diff =[]
         for i in range(self._nAgents):
             d = []
-            for k in self._Q[i]:
+            for k in self._Q[i]:#loop keys
                 d.append(np.abs(self._Q[i][k] -self._oldQ[i][k]))
             
             diff.append(np.amax(np.array(d)))
@@ -382,10 +406,8 @@ class actionValue(object):
         return np.mean([value[k][0] for k in value])
         # return np.mean(self._get_value_hive()[:,0])
     
-    def _get_value_noHive(self):
+    def _get_value(self):
         v = []
-        # for k in range(self._nAgents):
-        #     v.append(np.vstack((np.amax(self._Q[k],axis=1),np.argmax(self._Q[k],axis=1))).T)
         for i in range(self._nAgents):
             value = {}
             Q = self._Q[i]
@@ -393,7 +415,7 @@ class actionValue(object):
                 value[k]=(np.amax(Q[k]),np.argmax(Q[k]))
             v.append(value)
         return v
-    def _get_av_value_noHive(self):
+    def _get_av_value(self):
         avV =[]
         value = self._get_value_noHive()
         for k in range(self._nAgents):

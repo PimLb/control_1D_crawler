@@ -277,9 +277,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 class   Environment(object):
     def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True, controlClusterSize = 4): 
-         #shape in a tuple in the form (nx,ny)
-         # now t_position is only rightwall or leftwall
-         # in future, target --> list of targets
+         #control cluster refers to the number of suckers, the total number of spring involved is n_suckers-1
         
         x0 = tentacle_length/n_suckers
         amplitude = x0/x0Fraction
@@ -386,20 +384,22 @@ class   Environment(object):
             self.state_space = 8
         else:
             if controlClusterSize< 2:
-                raise ValueError("minimum control center size (number of springs) must be 2 (corresponding to a 3 suckers finite tentacle)")
+                raise ValueError("minimum control center size must be 3 corresponding to n_springs = 2")
+            n_springs = controlClusterSize-1 
             self.get_state = self._get_state_controlCluster
-            self.action_space = np.power(2,n_suckers)
-            self.state_space = np.power(2,controlClusterSize) # eg. ns =5, 4  springs --> 4 digit binary number to represent state
+            self.action_space = np.power(2,controlClusterSize)
+            self.state_space = np.power(2,n_springs) # eg. ns =5, 4  springs --> 4 digit binary number to represent state
             self.action_space_name = {1:'anchoring', 0:'not anchoring'}
             self.state_space_name = {1:'elongated', 0:'compressed'}
             # self._nagents = int((n_suckers - 1)/controlClusterSize)
-            self._nGanglia = int((n_suckers - 1)/controlClusterSize)
-            if ((n_suckers - 1)%controlClusterSize) != 0:
-                raise ValueError("number of springs cannot be contained an integer amount of times in the control center. Choose another ganglia size!")
+            self._nGanglia = int((n_suckers)/controlClusterSize)
+            if ((n_suckers)%controlClusterSize) != 0:
+                raise ValueError("number of suckers cannot be contained an integer amount of times in the control center. Choose another ganglia size!")
             print("\n**Control centers mode**\n")
             print("Number of ganglia: ",self._nGanglia)
             self.info["n ganglia"] =  self._nGanglia
-            self.controlClusterSize = controlClusterSize
+            self._n_springs = n_springs#springs per ganglia
+            print("Springs per ganglia (--> states) = ",self._n_springs)
             #states here become spring states. Which are binary: either elongated or compressed
             #therefore there is a straigthforward conveersion into a binary mapping
 
@@ -523,20 +523,16 @@ class   Environment(object):
     def _get_state_controlCluster(self):
         """
         Here the states are represented by the compression state of each spring, therefore 2 states per spring.
-        The whole state can be easily interpreted in binary code
+        The whole state can be easily interpreted in binary code.
+        Given a number of suckers contained in the ganglion, the number of state is ns-1.
+        We consider the righthand spring to each sucker in the ganglion except last one
         """
-        
-        #
-        # states = self.get_state_base()
-        # #need to reinterpret base and tip as a single state
-        # states[0] = [states[0][1],states[:-1][0]]
-        # states.pop() #remove "tip", which is now described within index 0 state
-        
+    
         #0 compressed, 1 elongated
         clustered_springs = []
         for i in range(self._nGanglia):
             springs = []
-            for sucker in  self._suckers[i*self.controlClusterSize:(i+1)*self.controlClusterSize]:
+            for sucker in  self._suckers[i*self._n_springs +i : (i+1)*self._n_springs +i ]:
                 k = sucker._id
                 pright = sucker.rightNeighbor._abslutePosition
                 dright =  pright -sucker._abslutePosition
