@@ -276,7 +276,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True, controlClusterSize = 4): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True, nGanglia =1): 
          #control cluster refers to the number of suckers, the total number of spring involved is n_suckers-1
         
         x0 = tentacle_length/n_suckers
@@ -383,6 +383,11 @@ class   Environment(object):
             self.state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
             self.state_space = 8
         else:
+            self.step = self._step_ganglia
+            controlClusterSize = int(n_suckers/nGanglia)
+            if ((n_suckers)%controlClusterSize) != 0:
+                raise ValueError("number of suckers cannot be contained an integer amount of times in the control center. Choose another ganglia size!")
+            print("number of suckers per ganglion =", controlClusterSize)
             if controlClusterSize< 2:
                 raise ValueError("minimum control center size must be 3 corresponding to n_springs = 2")
             n_springs = controlClusterSize-1 
@@ -392,9 +397,8 @@ class   Environment(object):
             self.action_space_name = {1:'anchoring', 0:'not anchoring'}
             self.state_space_name = {1:'elongated', 0:'compressed'}
             # self._nagents = int((n_suckers - 1)/controlClusterSize)
-            self._nGanglia = int((n_suckers)/controlClusterSize)
-            if ((n_suckers)%controlClusterSize) != 0:
-                raise ValueError("number of suckers cannot be contained an integer amount of times in the control center. Choose another ganglia size!")
+            self._nGanglia = nGanglia
+            
             print("\n**Control centers mode**\n")
             print("Number of ganglia: ",self._nGanglia)
             self.info["n ganglia"] =  self._nGanglia
@@ -801,15 +805,14 @@ class   Environment(object):
         return  newState,reward,terminal 
 
     #better to do the decoding on the side of learning
-    # def _stepOverdamped_ganglia(self,action_code):
-    #     '''
-    #     Input action is in this case a binary number per control center which is translated in an action per sucker.
-    #     Basically, here the translation happens, and thereafter the usual _stepOverdamped() method is called.
-    #     '''
-    #     action = []
-    #     for i in self._nGanglia:
-    #         action += [make_binary(action_code[i])] # some work needed on the side of Q to translate actions correctly distinguishing case of contraining a single action. In this case I want still the correct correspondence in binary code..
-    #     return self._stepOverdamped(action)
+    def _step_ganglia(self,action):
+        '''
+        Needs to flatten all actions per ganlia in single list to pass to usual method
+        '''
+        action_flattened = [a for al in action for a in al]
+        # print(action_flattened)
+     
+        return self._stepOverdamped(action_flattened)
 
         #Working in progress.. here the difficulty is to include scenarios with several control centers  = clustered multiagent 
         

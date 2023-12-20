@@ -7,7 +7,7 @@ max_lr = 0.1# was 0.3 learning rate
 min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.0025
+min_epsilon =0.01
 
 stateName =['->|<-','->|->','->|tip','<-|<-','<-|->','<-|tip','base|<-','base|->']
 stateMap_base = {('base',0):'base|<-',('base',1):'base|->'}
@@ -15,7 +15,7 @@ stateMap_tip = {(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
 stateMap_intermediate = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}
 actionState=[' not anchoring',' anchoring']
 
-#TODO: mange observables for ganglia case.. --> consider only average value
+
 
 
 
@@ -99,19 +99,12 @@ class actionValue(object):
                 
                 #BASE
                 Q={}
-                # Q[self._state_space[4]] = np.random.random(self.dim[1])
-                # Q[self._state_space[5]] = np.random.random(self.dim[1])
                 base_states = stateMap_base.values()
                 for k in base_states:
                     Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
                 Q={}
-                #INTERMEDIATE ONES
-                # Q[0] = np.random.random(self.dim[1])
-                # Q[1] = np.random.random(self.dim[1])
-                # Q[3] = np.random.random(self.dim[1])
-                # Q[4] = np.random.random(self.dim[1])
                 internal_states = stateMap_intermediate.values()
                 for k in internal_states:
                     Q[k] = np.random.random(self.action_space_dim)
@@ -126,12 +119,9 @@ class actionValue(object):
                     Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
-                # Q[self._state_space[6]] = np.random.random(self.dim[1])
-                # Q[self._state_space[7]] = np.random.random(self.dim[1])
 
                 self.get_value = self._get_value
                 self.get_av_value = self._get_av_value
-                self._get_diff = self._get_diff
                 self._value.append(self.get_value())
                 self._av_value.append(self.get_av_value())
                 #plots
@@ -147,26 +137,21 @@ class actionValue(object):
             nGanglia = info["n ganglia"]
             self._nAgents = nGanglia
             self.get_onPolicy_action = self._get_onPolicy_action_ganglia
-            # if nGanglia is not None:
-            #     self._nAgents = nGanglia
-            # else:
-            #     raise AttributeError("Please provide number of control centers (ganglia)")
+            
             print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
             print("Number of Ganglia = ", self._nAgents)
             print("Number of springs per ganglion considered: %d, corresponding to %d states"%((self._nsuckers)/self._nAgents-1,self.state_space_dim))
 
             self.get_value = self._get_value
             self.get_av_value = self._get_av_value
-            self._get_diff = self._get_diff
             self.makeGreedy = self._makeGreedy_ganglia
             # print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
-            
+            suckers_perGanglion = int(self._nsuckers/nGanglia)
             if singleActionConstraint:
-                print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ACTION AT A TIME **\n")
+                print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
                 self._singleActionConstraint = True
                 self.update = self._update_Q_ganglia_constrained
                 self.get_action = self._get_action_constrained
-                suckers_perGanglion = int(self._nsuckers/nGanglia)
                 self.action_space_dim = suckers_perGanglion +1 #THIS IS THE MAIN FEATURE OF THIS MODE
             else:
                 self._singleActionConstraint = False
@@ -182,8 +167,9 @@ class actionValue(object):
                 self._Q.append(copy.deepcopy(Q))
                 self._oldQ.append(copy.deepcopy(Q))
             self._av_value = []
-            self._av_value.append(self.get_av_value)
-            print("possible actions combitations per ganglion %d, for %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
+            self._av_value.append(self.get_av_value())
+            self._convergence = []
+            print("possible actions combitations per ganglion = %d, for a total of %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
 
         
     # def reset(self):
@@ -246,7 +232,6 @@ class actionValue(object):
             #     newaction.append(np.random.randint(0,  self.action_space))
         #NOT IMPLEMENTED --> (need one for each Q) UPDATE OBSERVABLES
     
-
     def _update_Q_ganglia(self,newstate,state,action,reward):
         '''
         Identical to Q single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs) + encoding of action
@@ -254,11 +239,13 @@ class actionValue(object):
         action_indexes = [interpret_binary(a) for a in action] # need to get back to correct indexing
         encoded_newstate = [interpret_binary(s) for s in newstate]
         encoded_oldstate = [interpret_binary(s) for s in state]
+        # print(encoded_newstate)
+        # print(encoded_oldstate)
         self._update_Q_single(encoded_newstate,encoded_oldstate,action_indexes,reward)
         
     def _update_Q_ganglia_constrained(self,newstate,state,action,reward):
         action_indexes = []
-        for i in self._nAgents:
+        for i in range(self._nAgents):
             try:
                 action_indexes.append(self._nsuckers-action[i].index(1))
             except ValueError:
@@ -303,7 +290,7 @@ class actionValue(object):
         new_action = self._get_action_single(encoded_state)
         decoded_newaction=[]
         for i in range(self._nAgents):
-            decoded_newaction += make_binary(new_action[i],int(self._nsuckers/self._nAgents))
+            decoded_newaction.append(make_binary(new_action[i],int(self._nsuckers/self._nAgents)))
 
         return decoded_newaction
     
@@ -314,7 +301,7 @@ class actionValue(object):
         new_action = self._get_action_single(encoded_state)
         decoded_newaction=[]
         for i in range(self._nAgents):
-            decoded_newaction += make_binary(int(2**(new_action[i]-1)),int(self._nsuckers/self._nAgents)) 
+            decoded_newaction.append(make_binary(int(2**(new_action[i]-1)),int(self._nsuckers/self._nAgents)))
        
         return decoded_newaction
 
@@ -417,7 +404,7 @@ class actionValue(object):
         return v
     def _get_av_value(self):
         avV =[]
-        value = self._get_value_noHive()
+        value = self._get_value()
         for k in range(self._nAgents):
             vv = value[k]
             avV.append(np.mean([vv[i][0] for i in vv]))
