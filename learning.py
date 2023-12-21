@@ -284,7 +284,6 @@ class actionValue(object):
         Identical to action single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs).
         Finally decoding of action, which from an integer are represented as a base 2 array positionally associated to the sucker.
         '''
-        
         encoded_state = [interpret_binary(s) for s in state]
         # print(encoded_state)
         new_action = self._get_action_single(encoded_state)
@@ -351,7 +350,8 @@ class actionValue(object):
         encoded_state = [interpret_binary(s) for s in state]
         new_action = []
         if self._singleActionConstraint:
-            new_action.append(make_binary(2**np.argmax(self._Q[k][encoded_state[k]])-1,int(self._nsuckers/self._nAgents)))
+            for k in range(self._nAgents):
+                new_action.append(make_binary(int(2**(np.argmax(self._Q[k][encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
         else:
             for k in range(self._nAgents):
                     # sind,_a = self._get_index(s[k])
