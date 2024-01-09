@@ -107,7 +107,7 @@ from tqdm import trange
 
 print("NON HIVE UPDATE")
 # input("proceed?\n")
-steps = 6000
+steps = 5000
 episodes=1000
 print("Episodes: ",episodes)
 print("steps x episode:", steps)

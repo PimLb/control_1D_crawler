@@ -28,4 +28,3 @@ def make_binary(baseTen_input:int,padding:int):
     binary_num = [int(i) for i in bin(baseTen_input)[2:]]
     out = [0]*(padding-len(binary_num)) + binary_num
     return out
-
