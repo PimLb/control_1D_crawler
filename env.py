@@ -271,7 +271,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude,exploringStarts = False):
     # A[n_suckers].assignPointer(n_suckers,left = A[n_suckers-1],right = A[1],infoText = "virtual sucker") #REPLICA of the base
     for k in range(1,n_suckers):
         A[k].assignPointer(k,left= A[k-1],right=A[k+1],infoText = "I'm intermediate sucker n " + str(k)) 
-    A[n_suckers].assignPointer(n_suckers-1,left = A[n_suckers-1],right = A[1],infoText = "I'm the virtual sucker")#VIRTUAL SUCKER
+    A[n_suckers].assignPointer(n_suckers,left = A[n_suckers-1],right = A[1],infoText = "I'm the virtual sucker")#VIRTUAL SUCKER
     return A
 
 
