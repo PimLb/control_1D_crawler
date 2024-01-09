@@ -393,7 +393,7 @@ class   Environment(object):
             n_springs = controlClusterSize-1 
             self.get_state = self._get_state_controlCluster
             self.action_space = np.power(2,controlClusterSize)
-            self.state_space = np.power(2,n_springs) # eg. ns =5, 4  springs --> 4 digit binary number to represent state
+            self.state_space = np.power(2,n_springs) # eg. ns =5 and 1 ganglion --> 4  springs --> 4 digit binary number to represent state
             self.action_space_name = {1:'anchoring', 0:'not anchoring'}
             self.state_space_name = {1:'elongated', 0:'compressed'}
             # self._nagents = int((n_suckers - 1)/controlClusterSize)
@@ -533,6 +533,7 @@ class   Environment(object):
         """
     
         #0 compressed, 1 elongated
+        #n_springs = (ns -1)/nGanglia
         clustered_springs = []
         for i in range(self._nGanglia):
             springs = []
@@ -540,7 +541,7 @@ class   Environment(object):
                 k = sucker._id
                 pright = sucker.rightNeighbor._abslutePosition
                 dright =  pright -sucker._abslutePosition
-                right_tension = sign0(dright-self.l0(self._t,k)) # 0 = negative right force --> compressed
+                right_tension = sign0(dright-self.l0(self._t,k)) # 0 = negative right force --> compressed, 1= elongated
                 springs.append(right_tension)
             clustered_springs.append(springs)
 
@@ -808,11 +809,20 @@ class   Environment(object):
     def _step_ganglia(self,action):
         '''
         Needs to flatten all actions per ganlia in single list to pass to usual method
+        Here we also explicitly update old positions. This could do more efficiently in the dedicated get state method. 
+        However some thought is needed, since the loop there skips some suckers..
         '''
         action_flattened = [a for al in action for a in al]
         # print(action_flattened)
+        return_value = self._stepOverdamped(action_flattened)
+
+        #update old positions
+        for sucker in self._suckers:
+            sucker._position_old = sucker.position.copy()
+            sucker._abslutePosition_old = sucker._abslutePosition.copy()
+        
      
-        return self._stepOverdamped(action_flattened)
+        return return_value
 
         #Working in progress.. here the difficulty is to include scenarios with several control centers  = clustered multiagent 
         
