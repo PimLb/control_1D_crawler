@@ -3,11 +3,19 @@ from globals import *
 import numpy as np
 # import copy 
 
+#good parameters multiagents:
 max_lr = 0.1# was 0.3 learning rate
 min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.005
+min_epsilon =0.001
+
+#good parameters ganglia:
+# max_lr = 0.1# was 0.3 learning rate
+# min_lr = 0.01# was 0.05 then 0.01, for hive 0.0025
+# gamma = 0.999#discount 0.9 to reflect upon..
+# max_epsilon = 0.9
+# min_epsilon =0.01
 
 stateName =['->|<-','->|->','->|tip','<-|<-','<-|->','<-|tip','base|<-','base|->']
 stateMap_base = {('base',0):'base|<-',('base',1):'base|->'}
@@ -34,7 +42,7 @@ class actionValue(object):
         self.lr = max_lr
         self.discount = gamma
 
-        scheduling_steps = total_episodes - int(total_episodes/4) #total_episodes
+        scheduling_steps = total_episodes - int(total_episodes/2) #total_episodes
         print("scheduling steps =", scheduling_steps)
         print("greedy steps =", total_episodes - scheduling_steps)
         self._greedySteps = total_episodes - scheduling_steps
@@ -51,7 +59,7 @@ class actionValue(object):
             self._multiAgent = True
             self._nAgents = self._nsuckers
             self.get_onPolicy_action = self._get_onPolicy_action_multiagent
-            self.makeGreedy = self._makeGreedy_multiagent
+            self.makeGreedy = self._makeGreedy
             
             if hiveUpdate:
                 self._parallelUpdate = True
@@ -77,7 +85,7 @@ class actionValue(object):
                 self._av_value = []
                 self.get_value = self._get_value_hive
                 self.get_av_value = self._get_av_value_hive
-                self._get_diff = self._get_diff_hive
+                self.get_diff = self._get_diff_hive
                 self._value.append(self.get_value())
                 self._av_value.append(self.get_av_value())
                 #plots
@@ -120,6 +128,7 @@ class actionValue(object):
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
 
+                self.get_diff = self._get_diff_multiagent
                 self.get_value = self._get_value
                 self.get_av_value = self._get_av_value
                 self._value.append(self.get_value())
@@ -131,45 +140,78 @@ class actionValue(object):
                 
 
   
-        else:
-            self._parallelUpdate = False
+        else:   
             self._multiAgent = False
             nGanglia = info["n ganglia"]
             self._nAgents = nGanglia
             self.get_onPolicy_action = self._get_onPolicy_action_ganglia
-            
+            self.makeGreedy = self._makeGreedy_ganglia
             print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
             print("Number of Ganglia = ", self._nAgents)
             print("Number of springs per ganglion considered: %d, corresponding to %d states"%((self._nsuckers)/self._nAgents-1,self.state_space_dim))
 
-            self.get_value = self._get_value
-            self.get_av_value = self._get_av_value
-            self.makeGreedy = self._makeGreedy_ganglia
+            
             # print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             suckers_perGanglion = int(self._nsuckers/nGanglia)
-            if singleActionConstraint:
-                print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
-                self._singleActionConstraint = True
-                self.update = self._update_Q_ganglia_constrained
-                self.get_action = self._get_action_constrained
-                self.action_space_dim = suckers_perGanglion +1 #THIS IS THE MAIN FEATURE OF THIS MODE
+            
+            if nGanglia>1 and hiveUpdate:
+                print("\n** <WARNING>: HIVE UPDATE **\n")
+                self._parallelUpdate = True
+                self.get_value = self._get_value_hive
+                self.get_av_value = self._get_av_value_hive
+                if singleActionConstraint:
+                    print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
+                    self._singleActionConstraint = True
+                    self.update = self._update_Q_ganglia_constrained_hive
+                    self.get_action = self._get_action_ganglia_constrained_hive
+                    self.action_space_dim = suckers_perGanglion +1 #THIS IS THE MAIN FEATURE OF THIS MODE
+                else:
+                    self._singleActionConstraint = False
+                    self.update = self._update_Q_ganglia_hive
+                    self.get_action = self._get_action_ganglia_hive
+                Q={}
+                for k in range(self.state_space_dim):
+                    Q[k] = np.random.random(self.action_space_dim)
+                
+                self._Q = copy.deepcopy(Q)
+                self._oldQ = copy.deepcopy(Q)
+                self.get_diff = self._get_diff_hive
+                self._av_value = []
+                self._av_value.append(self.get_av_value())
+                self._convergence = []
+                self.plot_av_value = self._plot_av_value_ganglia_hive
+                self.plot_convergence = self._plot_convergence_hive
             else:
-                self._singleActionConstraint = False
-                self.update = self._update_Q_ganglia
-                self.get_action = self._get_action_ganglia
-            self._Q = []
-            self._oldQ = []
-            Q={}
-            for k in range(self.state_space_dim):
-                Q[k] = np.random.random(self.action_space_dim)
-            for i in range(self._nAgents):
-                #1 Q matrix per control center (ganglia)
-                self._Q.append(copy.deepcopy(Q))
-                self._oldQ.append(copy.deepcopy(Q))
-            self._av_value = []
-            self._av_value.append(self.get_av_value())
-            self._convergence = []
-            print("possible actions combitations per ganglion = %d, for a total of %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
+                self._parallelUpdate = False
+                self.get_value = self._get_value
+                self.get_av_value = self._get_av_value
+                
+                if singleActionConstraint:
+                    print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
+                    self._singleActionConstraint = True
+                    self.update = self._update_Q_ganglia_constrained
+                    self.get_action = self._get_action_ganglia_constrained
+                    self.action_space_dim = suckers_perGanglion +1 #THIS IS THE MAIN FEATURE OF THIS MODE
+                else:
+                    self._singleActionConstraint = False
+                    self.update = self._update_Q_ganglia
+                    self.get_action = self._get_action_ganglia
+                self._Q = []
+                self._oldQ = []
+                Q={}
+                for k in range(self.state_space_dim):
+                    Q[k] = np.random.random(self.action_space_dim)
+                for i in range(self._nAgents):
+                    #1 Q matrix per control center (ganglia)
+                    self._Q.append(copy.deepcopy(Q))
+                    self._oldQ.append(copy.deepcopy(Q))
+                self.get_diff = self._get_diff_multiagent
+                self._av_value = []
+                self._av_value.append(self.get_av_value())
+                self._convergence = []
+                self.plot_av_value = self._plot_av_value_ganglia
+                self.plot_convergence = self._plot_convergence_noHive
+                print("possible actions combitations per ganglion = %d, for a total of %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
 
         
     # def reset(self):
@@ -242,6 +284,17 @@ class actionValue(object):
         # print(encoded_newstate)
         # print(encoded_oldstate)
         self._update_Q_single(encoded_newstate,encoded_oldstate,action_indexes,reward)
+    
+    def _update_Q_ganglia_hive(self,newstate,state,action,reward):
+        '''
+        Identical to Q single (with here nAgents = nGanglia) + encoding of state (which are here compression states of all the springs) + encoding of action
+        '''
+        action_indexes = [interpret_binary(a) for a in action] # need to get back to correct indexing
+        encoded_newstate = [interpret_binary(s) for s in newstate]
+        encoded_oldstate = [interpret_binary(s) for s in state]
+        # print(encoded_newstate)
+        # print(encoded_oldstate)
+        self._update_Q_parallel(encoded_newstate,encoded_oldstate,action_indexes,reward)
         
     def _update_Q_ganglia_constrained(self,newstate,state,action,reward):
         action_indexes = []
@@ -250,9 +303,22 @@ class actionValue(object):
                 action_indexes.append(self._nsuckers-action[i].index(1))
             except ValueError:
                 action_indexes.append(0)
+        # print(action_indexes)
         encoded_newstate = [interpret_binary(s) for s in newstate]
         encoded_oldstate = [interpret_binary(s) for s in state]
         self._update_Q_single(encoded_newstate,encoded_oldstate,action_indexes,reward)
+
+    def _update_Q_ganglia_constrained_hive(self,newstate,state,action,reward):
+        action_indexes = []
+        for i in range(self._nAgents):
+            try:
+                action_indexes.append(self._nsuckers-action[i].index(1))
+            except ValueError:
+                action_indexes.append(0)
+        # print(action_indexes)
+        encoded_newstate = [interpret_binary(s) for s in newstate]
+        encoded_oldstate = [interpret_binary(s) for s in state]
+        self._update_Q_parallel(encoded_newstate,encoded_oldstate,action_indexes,reward)
 
     
     def _get_action_hive(self,state):
@@ -293,9 +359,25 @@ class actionValue(object):
 
         return decoded_newaction
     
+    def _get_action_ganglia_hive(self,state):
+        '''
+        Identical to action hive + encoding of state (which are here compression states of all the springs).
+        Finally decoding of action, which from an integer are represented as a base 2 array positionally associated to the sucker.
+        '''
+        encoded_state = [interpret_binary(s) for s in state]
+        # print(encoded_state)
+        new_action = self._get_action_hive(encoded_state)
+        decoded_newaction=[]
+        for i in range(self._nAgents):
+            decoded_newaction.append(make_binary(new_action[i],int(self._nsuckers/self._nAgents)))
 
+        return decoded_newaction
 
-    def _get_action_constrained(self,state):
+    def _get_action_ganglia_constrained(self,state):
+        """
+        Like get action ganglia, but with the action space constrained to a single action (sucker anchoring) at a time.
+        The only change is the decoding of actions
+        """
         encoded_state = [interpret_binary(s) for s in state]
         new_action = self._get_action_single(encoded_state)
         # print(new_action)
@@ -305,12 +387,26 @@ class actionValue(object):
        
         return decoded_newaction
 
+    def _get_action_ganglia_constrained_hive(self,state):
+        """
+        Like get action ganglia_hive, but with the action space constrained to a single action (sucker anchoring) at a time.
+        The only change is the decoding of actions
+        """
+        encoded_state = [interpret_binary(s) for s in state]
+        new_action = self._get_action_hive(encoded_state)
+        # print(new_action)
+        decoded_newaction=[]
+        for i in range(self._nAgents):
+            decoded_newaction.append(make_binary(int(2**(new_action[i]-1.)),int(self._nsuckers/self._nAgents)))
+       
+        return decoded_newaction
+    
     # def _get_onPolicy_action_contstrained(self,state):
     #     new_action = int(2**(self._get_onPolicy_action(state)-1))
     #     return new_action
 
     
-    def _makeGreedy_multiagent(self):
+    def _makeGreedy(self):
         self.lr = self.scheduled_lr[self.n_episodes]
         self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
@@ -318,9 +414,12 @@ class actionValue(object):
         #UPDATE OBSERVABLES (costly)
         self._value.append(self.get_value())
         self._av_value.append(self.get_av_value())
-        self._convergence.append(self._get_diff())
+        self._convergence.append(self.get_diff())
         
     def _makeGreedy_ganglia(self):
+        """
+        Same of above but without saving each value which would cost too much memory in this case
+        """
         self.lr = self.scheduled_lr[self.n_episodes]
         self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
@@ -328,7 +427,7 @@ class actionValue(object):
         #UPDATE OBSERVABLES (costly)
         
         self._av_value.append(self.get_av_value())
-        self._convergence.append(self._get_diff())
+        self._convergence.append(self.get_diff())
     
     def _get_onPolicy_action_multiagent(self,state):
         new_action = []
@@ -349,14 +448,22 @@ class actionValue(object):
     def _get_onPolicy_action_ganglia(self,state):
         encoded_state = [interpret_binary(s) for s in state]
         new_action = []
-        if self._singleActionConstraint:
-            for k in range(self._nAgents):
-                new_action.append(make_binary(int(2**(np.argmax(self._Q[k][encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
+        if self._parallelUpdate:
+            if self._singleActionConstraint:
+                for k in range(self._nAgents):
+                    new_action.append(make_binary(int(2**(np.argmax(self._Q[encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
+            else:
+                for k in range(self._nAgents):
+                        new_action.append(make_binary(np.argmax(self._Q[encoded_state[k]]),int(self._nsuckers/self._nAgents)))
         else:
-            for k in range(self._nAgents):
-                    # sind,_a = self._get_index(s[k])
-                    # print(s[k],sind)
-                    new_action.append(make_binary(np.argmax(self._Q[k][encoded_state[k]]),int(self._nsuckers/self._nAgents)))
+            if self._singleActionConstraint:
+                for k in range(self._nAgents):
+                    new_action.append(make_binary(int(2**(np.argmax(self._Q[k][encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
+            else:
+                for k in range(self._nAgents):
+                        # sind,_a = self._get_index(s[k])
+                        # print(s[k],sind)
+                        new_action.append(make_binary(np.argmax(self._Q[k][encoded_state[k]]),int(self._nsuckers/self._nAgents)))
         return new_action
     
 
@@ -371,7 +478,7 @@ class actionValue(object):
         # self._oldQ = self._Q.copy()
         return np.amax(np.array(diff))
     
-    def _get_diff(self):
+    def _get_diff_multiagent(self):
         diff =[]
         for i in range(self._nAgents):
             d = []
@@ -490,7 +597,23 @@ class actionValue(object):
         avValue = np.array(self._av_value)[:,n]
         self._fig_av_value.plot(episodes,avValue)
 
+    def _plot_av_value_ganglia(self):
+        for n in range(self._nAgents):
+            plt.figure()
+            self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+            self._fig_av_value.set_title(label='Average value learning for ganglion '+str(n))
+            episodes = [e for e in range(self.n_episodes+1)]
+            avValue = np.array(self._av_value)[:,n]
+            self._fig_av_value.plot(episodes,avValue)
+
     
+    def _plot_av_value_ganglia_hive(self):
+        plt.figure()
+        self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+        self._fig_av_value.set_title(label='Average value (hive) learning')
+        episodes = [e for e in range(self.n_episodes+1)]
+        self._fig_av_value.plot(episodes,self._av_value)
+
     def _plot_convergence_hive(self):
         plt.figure()
         self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
@@ -499,10 +622,13 @@ class actionValue(object):
         self._fig_convergence.plot(episodes,self._convergence)
     
     def _plot_convergence_noHive(self):
-        n = int(input("sucker (agent) number"))
+        if self._nAgents>1:
+            n = int(input("Agent (sucker or ganglion) number"))
+        else:
+            n=0
         plt.figure()
         self._fig_convergence = plt.subplot(xlabel='episode', ylabel='convergence')
-        self._fig_convergence.set_title(label='Global convergence Q function for sucker  '+str(n))
+        self._fig_convergence.set_title(label='Global convergence Q function for agent  '+str(n))
         episodes = [e for e in range(self.n_episodes)]
         convergence = np.array(self._convergence)[:,n]
         self._fig_convergence.plot(episodes,convergence)
