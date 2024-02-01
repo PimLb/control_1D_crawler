@@ -5,10 +5,12 @@ import numpy as np
 
 #good parameters multiagents:
 max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
+min_lr = 0.01# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.001
+min_epsilon =0.01
+
+
 
 #good parameters ganglia:
 # max_lr = 0.1# was 0.3 learning rate
@@ -29,7 +31,7 @@ actionState=[' not anchoring',' anchoring']
 
 
 class actionValue(object):
-    def __init__(self,info:dict,total_episodes,hiveUpdate = True, singleActionConstraint = False) -> None:
+    def __init__(self,info:dict,total_episodes,hiveUpdate = True, singleActionConstraint = False,adaptiveScheduling=False) -> None:
         #Learning space a richer container
         learning_space = info["learning space"]
         self._nsuckers = info["n suckers"]
@@ -42,20 +44,31 @@ class actionValue(object):
         self.lr = max_lr
         self.discount = gamma
 
-        scheduling_steps = total_episodes - int(total_episodes/2) #total_episodes
-        print("scheduling steps =", scheduling_steps)
-        print("greedy steps =", total_episodes - scheduling_steps)
-        self._greedySteps = total_episodes - scheduling_steps
-        self._upgrade_e = (max_epsilon-min_epsilon)/scheduling_steps
-        self._upgrade_lr = (max_lr-min_lr)/scheduling_steps
+        scheduling_steps = total_episodes - int(total_episodes/3) #total_episodes
+        print("n scheduling episodes =", scheduling_steps)
+        
+        # self._nscheduling_steps = total_episodes - scheduling_steps
+        self._schedulingSteps = scheduling_steps
+        print("min epsilon =",min_epsilon)
+        print("min lr =",min_lr)
+        if adaptiveScheduling:
+            print("Adaptive scheduling")
+            # print("maximum pseudo greedy episodes =", max_episodes)
+        else:
+            # self._greedySteps = total_episodes - scheduling_steps
+            print("non scheduled episodes =", total_episodes - scheduling_steps)
+        self._update_epsilon = (max_epsilon-min_epsilon)/scheduling_steps
+        self._update_lr = (max_lr-min_lr)/scheduling_steps
 
         self.n_episodes = 0
+        self._lastPolicies = []
 
-        self.scheduled_epsilon = [max_epsilon-self._upgrade_e*i for i in range(scheduling_steps)] + [min_epsilon] * (total_episodes-scheduling_steps)
-        self.scheduled_lr = [max_lr-self._upgrade_lr*i for i in range(scheduling_steps)] + [min_lr] * (total_episodes-scheduling_steps)
+        # self.scheduled_epsilon = [max_epsilon-self._upgrade_e*i for i in range(scheduling_steps)] + [min_epsilon] * (total_episodes-scheduling_steps)
+        # self.scheduled_lr = [max_lr-self._upgrade_lr*i for i in range(scheduling_steps)] + [min_lr] * (total_episodes-scheduling_steps)
 
         # print(len(self.scheduled_epsilon))
         if is_multiAgent:
+            self._singleActionConstraint = False
             self._multiAgent = True
             self._nAgents = self._nsuckers
             self.get_onPolicy_action = self._get_onPolicy_action_multiagent
@@ -211,7 +224,7 @@ class actionValue(object):
                 self._convergence = []
                 self.plot_av_value = self._plot_av_value_ganglia
                 self.plot_convergence = self._plot_convergence_noHive
-                print("possible actions combitations per ganglion = %d, for a total of %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
+            print("possible actions combitations per ganglion = %d, for a total of %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
 
         
     # def reset(self):
@@ -407,27 +420,69 @@ class actionValue(object):
 
     
     def _makeGreedy(self):
-        self.lr = self.scheduled_lr[self.n_episodes]
-        self.epsilon = self.scheduled_epsilon[self.n_episodes]
-        self.n_episodes+=1
+        #Più complicato di così perché ho bisogno di questa funzione per ogni Q matrix.
+        #Voglio essere in grado di fermare update solo per certo Q
+
+
+        # self.lr = self.scheduled_lr[self.n_episodes]
+        # self.epsilon = self.scheduled_epsilon[self.n_episodes]
+        
 
         #UPDATE OBSERVABLES (costly)
         self._value.append(self.get_value())
         self._av_value.append(self.get_av_value())
         self._convergence.append(self.get_diff())
+
+        #TRACK LAST N POLICIES
+        keep = int(self._nscheduling_steps/2)
+        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+
+        self.n_episodes+=1
+        if self.n_episodes >= self._schedulingSteps:
+            self.lr = min_lr
+            self.epsilon = min_epsilon
+            #check convergence
+            # diff = abs(self._av_value[-1]-self._av_value[-2])
+            # if diff <= min_lr:
+            #     conv=True
+            
+        else:
+            # conv = False
+            self.lr -= self._update_lr
+            self.epsilon -= self._update_epsilon
+
+        return 
+
         
     def _makeGreedy_ganglia(self):
         """
         Same of above but without saving each value which would cost too much memory in this case
         """
-        self.lr = self.scheduled_lr[self.n_episodes]
-        self.epsilon = self.scheduled_epsilon[self.n_episodes]
+        # self.lr = self.scheduled_lr[self.n_episodes]
+        # self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
 
         #UPDATE OBSERVABLES (costly)
         
         self._av_value.append(self.get_av_value())
         self._convergence.append(self.get_diff())
+
+        #TRACK LAST N POLICIES
+        keep = int(self._nscheduling_steps/2)
+        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+
+        if self.n_episodes >= self._schedulingSteps:
+            self.lr = min_lr
+            self.epsilon = min_epsilon
+            #check convergence
+            # diff = abs(self._av_value[-1]-self._av_value[-2])
+            # if diff <= min_lr:
+            #     conv=True
+            
+        else:
+            # conv = False
+            self.lr -= self._update_lr
+            self.epsilon -= self._update_epsilon
     
     def _get_onPolicy_action_multiagent(self,state):
         new_action = []
@@ -496,6 +551,8 @@ class actionValue(object):
         return value
         #return np.vstack((np.amax(self._Q,axis=1),np.argmax(self._Q,axis=1))).T
 
+    
+    
     def _get_av_value_hive(self):
         value = self._get_value_hive()
         return np.mean([value[k][0] for k in value])
@@ -521,6 +578,28 @@ class actionValue(object):
     def get_conv(self):
         return self._convergence[-1]
     
+
+    def getPolicy(self):
+        """
+        Returns an array representing the policy.
+        """
+        #note that for multiagent I'm looping through dictionary keys, while for ganglia through
+        #Make it general for any scenario (multi-agent/ ganglia ecc)
+        policy_vector =[] #policy is a vector of dimension #states
+        # if I have more than one Q matrix there is one policy per matrix
+        if self._parallelUpdate:
+            for k in self._Q:
+                policy_vector.append(np.argmax(self._Q[k]))
+        else:
+            for i in range(self._nAgents):
+                pv=[]
+                Q = self._Q[i]
+                for k in Q:
+                    pv.append(np.argmax(Q[k]))
+                policy_vector.append(pv)
+        return policy_vector
+    
+
 
     def _plot_value_hive(self):
         plt.figure(figsize=(10, 6))
@@ -581,14 +660,25 @@ class actionValue(object):
 
 
     
-    def _plot_av_value_hive(self):
+    def _plot_av_value_hive(self,labelPolicyChange=False):
         plt.figure()
         self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
         self._fig_av_value.set_title(label='Average value')
         episodes = [e for e in range(self.n_episodes+1)]
         self._fig_av_value.plot(episodes,self._av_value)
+        if labelPolicyChange:
+            prop_cycle = plt.rcParams['axes.prop_cycle']
+            colors = prop_cycle.by_key()['color']
+            
+            for t in range(1,len(self._lastPolicies)):
+                difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
+                if difference != 0:
+                    color = colors[1]
+                else:
+                    color = colors[0]
+                self._fig_av_value.plot(episodes[self.n_episodes-self._nscheduling_steps+t],self._av_value[t],color)
 
-    def _plot_av_value_noHive(self):
+    def _plot_av_value_noHive(self,labelPolicyChange=False):
         n = int(input("sucker (agent) number"))
         plt.figure()
         self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
@@ -596,8 +686,26 @@ class actionValue(object):
         episodes = [e for e in range(self.n_episodes+1)]
         avValue = np.array(self._av_value)[:,n]
         self._fig_av_value.plot(episodes,avValue)
+        if labelPolicyChange:
+            prop_cycle = plt.rcParams['axes.prop_cycle']
+            colors = prop_cycle.by_key()['color']
+            
+            for t in range(1,len(self._lastPolicies)):
+                difference =np.sum(np.array(self._lastPolicies[-t-1][n])-np.array(self._lastPolicies[-t][n]))
+                # print(self._lastPolicies[-t-1][n])
+                # print(self._lastPolicies[-t][n])
+                # print(difference)
+                if difference != 0:
+                    color = colors[1]
+                    # print("here")
+                else:
+                    color = colors[0]
+                # print(color)
+                # print(episodes[-t],avValue[-t])
+    
+                self._fig_av_value.scatter(episodes[-t],avValue[-t],c=color)
 
-    def _plot_av_value_ganglia(self):
+    def _plot_av_value_ganglia(self,labelPolicyChange=False):
         for n in range(self._nAgents):
             plt.figure()
             self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
@@ -605,14 +713,36 @@ class actionValue(object):
             episodes = [e for e in range(self.n_episodes+1)]
             avValue = np.array(self._av_value)[:,n]
             self._fig_av_value.plot(episodes,avValue)
+            if labelPolicyChange:
+                prop_cycle = plt.rcParams['axes.prop_cycle']
+                colors = prop_cycle.by_key()['color']
+                
+                for t in range(1,len(self._lastPolicies)):
+                    difference =np.sum(np.array(self._lastPolicies[-t-1][n])-np.array(self._lastPolicies[-t][n]))
+                    if difference != 0:
+                        color = colors[1]
+                    else:
+                        color = colors[0]
+                    self._fig_av_value.plot(episodes[self.n_episodes-self._nscheduling_steps+t],avValue[t],color)
 
     
-    def _plot_av_value_ganglia_hive(self):
+    def _plot_av_value_ganglia_hive(self,labelPolicyChange):
         plt.figure()
         self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
         self._fig_av_value.set_title(label='Average value (hive) learning')
         episodes = [e for e in range(self.n_episodes+1)]
         self._fig_av_value.plot(episodes,self._av_value)
+        if labelPolicyChange:
+            prop_cycle = plt.rcParams['axes.prop_cycle']
+            colors = prop_cycle.by_key()['color']
+            
+            for t in range(1,len(self._lastPolicies)):
+                difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
+                if difference != 0:
+                    color = colors[1]
+                else:
+                    color = colors[0]
+                self._fig_av_value.plot(episodes[self.n_episodes-self._nscheduling_steps+t],self._av_value[t],color)
 
     def _plot_convergence_hive(self):
         plt.figure()
