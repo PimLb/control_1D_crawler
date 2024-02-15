@@ -1,14 +1,17 @@
 
 from globals import *
 import numpy as np
-# import copy 
+import analysis_utilities
+
+
+
 
 #good parameters multiagents:
 max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.01# was 0.05 then 0.01, for hive 0.0025
+min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.01
+min_epsilon =0.001
 
 
 
@@ -25,56 +28,59 @@ stateMap_tip = {(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
 stateMap_intermediate = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}
 actionState=[' not anchoring',' anchoring']
 
+# stateIndexMap = {'->|<-':0,'->|->':1,'->|tip':6,'<-|<-':2,'<-|->':3,'<-|tip':7,'base|<-':4,'base|->':5}
 
 
 
 
 
 class actionValue(object):
-    def __init__(self,info:dict,total_episodes,hiveUpdate = True, singleActionConstraint = False,adaptiveScheduling=False) -> None:
+    def __init__(self,info:dict,max_episodes=1500,hiveUpdate = True, singleActionConstraint = False,adaptiveScheduling=False,scheduling_steps=1000) -> None:
+
+
         #Learning space a richer container
         learning_space = info["learning space"]
         self._nsuckers = info["n suckers"]
-        is_multiAgent = info["multiagent"]
+        isGanglia = info["isGanglia"]
         
         self.state_space_dim = learning_space[0]
         self.action_space_dim = learning_space[1]
         # self.dim = learning_space
-        self.epsilon = max_epsilon
+        # self.epsilon = max_epsilon
         self.lr = max_lr
         self.discount = gamma
-
-        scheduling_steps = total_episodes - int(total_episodes/3) #total_episodes
+        self.max_episodes = max_episodes
+        # scheduling_steps = total_episodes - int(total_episodes/3) #total_episodes
         print("n scheduling episodes =", scheduling_steps)
         
-        # self._nscheduling_steps = total_episodes - scheduling_steps
+        self._policyMemory = int((max_episodes - scheduling_steps)/2)
         self._schedulingSteps = scheduling_steps
         print("min epsilon =",min_epsilon)
         print("min lr =",min_lr)
         if adaptiveScheduling:
             print("Adaptive scheduling")
-            # print("maximum pseudo greedy episodes =", max_episodes)
+            print("maximum non scheduled episodes =", max_episodes - scheduling_steps)
         else:
             # self._greedySteps = total_episodes - scheduling_steps
-            print("non scheduled episodes =", total_episodes - scheduling_steps)
+            print("non scheduled episodes =", max_episodes - scheduling_steps)
         self._update_epsilon = (max_epsilon-min_epsilon)/scheduling_steps
         self._update_lr = (max_lr-min_lr)/scheduling_steps
 
         self.n_episodes = 0
         self._lastPolicies = []
-
+        self._refPolicy = None
         # self.scheduled_epsilon = [max_epsilon-self._upgrade_e*i for i in range(scheduling_steps)] + [min_epsilon] * (total_episodes-scheduling_steps)
         # self.scheduled_lr = [max_lr-self._upgrade_lr*i for i in range(scheduling_steps)] + [min_lr] * (total_episodes-scheduling_steps)
-
-        # print(len(self.scheduled_epsilon))
-        if is_multiAgent:
+        
+        if isGanglia ==False:
             self._singleActionConstraint = False
-            self._multiAgent = True
-            self._nAgents = self._nsuckers
-            self.get_onPolicy_action = self._get_onPolicy_action_multiagent
-            self.makeGreedy = self._makeGreedy
+            self._ganglia = False
+            self._nAgents = self._nsuckers #IMPORTANT
+
+            # self.get_onPolicy_action = self._get_onPolicy_action_multiagent
             
             if hiveUpdate:
+                self.epsilon = max_epsilon
                 self._parallelUpdate = True
                 print("\n** <WARNING>:  HIVE UPDATE **\n")
                 self.update = self._update_Q_parallel
@@ -110,6 +116,7 @@ class actionValue(object):
                 self.update = self._update_Q_single
                 self.get_action = self._get_action_single
                 self._Q = []
+                self.epsilon = [] #in principle one epsilon per agent so that I can get greedy policy selectively
                 print("\n** <WARNING>:  NOT HIVE UPDATE **\n")
                 print("A Q matrix per agent")
                 print("(however epsilon, lr and gamma are universal)")
@@ -125,6 +132,7 @@ class actionValue(object):
                     Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
+                self.epsilon.append(max_epsilon)
                 Q={}
                 internal_states = stateMap_intermediate.values()
                 for k in internal_states:
@@ -132,6 +140,7 @@ class actionValue(object):
                 for i in range(1,self._nAgents-1):
                     self._Q.append(copy.deepcopy(Q)) 
                     self._oldQ.append(copy.deepcopy(Q))
+                    self.epsilon.append(max_epsilon)
                 
                 #TIP
                 Q={}
@@ -140,6 +149,7 @@ class actionValue(object):
                     Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
+                self.epsilon.append(max_epsilon)
 
                 self.get_diff = self._get_diff_multiagent
                 self.get_value = self._get_value
@@ -150,15 +160,18 @@ class actionValue(object):
                 self.plot_value = self._plot_value_noHive
                 self.plot_convergence = self._plot_convergence_noHive
                 self.plot_av_value = self._plot_av_value_noHive
+
+                self.epsilon=np.array(self.epsilon)
                 
 
   
         else:   
-            self._multiAgent = False
+            self._ganglia= True
             nGanglia = info["n ganglia"]
+
             self._nAgents = nGanglia
-            self.get_onPolicy_action = self._get_onPolicy_action_ganglia
-            self.makeGreedy = self._makeGreedy_ganglia
+            # self.get_onPolicy_action = self._get_onPolicy_action_ganglia
+            # self.makeGreedy = self._makeGreedy_ganglia
             print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
             print("Number of Ganglia = ", self._nAgents)
             print("Number of springs per ganglion considered: %d, corresponding to %d states"%((self._nsuckers)/self._nAgents-1,self.state_space_dim))
@@ -167,7 +180,8 @@ class actionValue(object):
             # print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             suckers_perGanglion = int(self._nsuckers/nGanglia)
             
-            if nGanglia>1 and hiveUpdate:
+            if nGanglia>1 and hiveUpdate: #nGanglia>1 checked only to not print useless warning message
+                self.epsilon = max_epsilon
                 print("\n** <WARNING>: HIVE UPDATE **\n")
                 self._parallelUpdate = True
                 self.get_value = self._get_value_hive
@@ -198,6 +212,7 @@ class actionValue(object):
                 self._parallelUpdate = False
                 self.get_value = self._get_value
                 self.get_av_value = self._get_av_value
+                self.epsilon = [] #in principle one epsilon per agent so that I can get greedy policy selectively (not doing for lr since I can just stop updating if needed..)
                 
                 if singleActionConstraint:
                     print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
@@ -218,20 +233,35 @@ class actionValue(object):
                     #1 Q matrix per control center (ganglia)
                     self._Q.append(copy.deepcopy(Q))
                     self._oldQ.append(copy.deepcopy(Q))
+                    self.epsilon.append(max_epsilon)
                 self.get_diff = self._get_diff_multiagent
                 self._av_value = []
                 self._av_value.append(self.get_av_value())
                 self._convergence = []
                 self.plot_av_value = self._plot_av_value_ganglia
                 self.plot_convergence = self._plot_convergence_noHive
+                self.epsilon = np.array(self.epsilon)
             print("possible actions combitations per ganglion = %d, for a total of %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
 
-        
-    # def reset(self):
-    #     self.n_episodes = 0
-    #     self._Q = np.random.random(self.dim)
-    #     self.epsilon = max_epsilon
-    #     self.lr = max_lr
+
+            #NEW container with agents to be updated
+            self._agentUpdateSet = set([a for a in range(self._nAgents)])
+
+            if self._parallelUpdate:
+                if adaptiveScheduling:
+                    self._tollerance = min_lr #1%
+                    print("<WARNING>: Adaptive (hive) scheduling tollerance = %.3f"%self._tollerance)
+                    self.makeGreedy = self._makeGreedyAdaptive_parallel
+                else:
+                    self.makeGreedy = self._makeGreedy_parallel
+            else:
+                if adaptiveScheduling:
+                    self._tollerance = min_lr #1%
+                    print("<WARNING>: Adaptive scheduling tollerance = %.3f. Convergence checked for each agent (if more than one.)"%self._tollerance)
+                    self.makeGreedy = self._makeGreedyAdaptive_multi
+                else:
+                    self.makeGreedy = self._makeGreedy_multi
+
     
     def _get_index(self,state,action=0):
         # if self._multiAgent:
@@ -270,9 +300,10 @@ class actionValue(object):
     def _update_Q_single(self,newstate,state,action,reward):
         '''
         1 Q matrix per agent. Each sucker-agent can develop an original policy.
+        NEW: update only Q matrix of non converged agents. Use new container (a set) monitoring agents to be updated
         '''
         #update each agent Q
-        for  k in range(self._nAgents):
+        for  k in self._agentUpdateSet:
             # s_new,_a_new = self._get_index(newstate[k]) 
             # s_old,a_old = self._get_index(oldstate[k],action[k])Q.
             old_state = state[k]
@@ -351,8 +382,7 @@ class actionValue(object):
         For each agent (sucker or ganglion), outputs the action. Random number re-extracted for each one'''
         new_action = []
         for k in range(self._nAgents):
-            # sind,_a = self._get_index(s[k])
-            if np.random.random() < (1 - self.epsilon):
+            if np.random.random() < (1 - self.epsilon[k]):
                 new_action.append(np.argmax(self._Q[k][state[k]]))
             else:
                 new_action.append(np.random.randint(0,self.action_space_dim))
@@ -413,16 +443,36 @@ class actionValue(object):
             decoded_newaction.append(make_binary(int(2**(new_action[i]-1.)),int(self._nsuckers/self._nAgents)))
        
         return decoded_newaction
-    
-    # def _get_onPolicy_action_contstrained(self,state):
-    #     new_action = int(2**(self._get_onPolicy_action(state)-1))
-    #     return new_action
 
-    
-    def _makeGreedy(self):
-        #Più complicato di così perché ho bisogno di questa funzione per ogni Q matrix.
-        #Voglio essere in grado di fermare update solo per certo Q
+    def _makeGreedyAdaptive_parallel(self):
+        '''
+        Here I check convergence and stop updating if Q converged
+        '''
+        self._value.append(self.get_value())
+        self._av_value.append(self.get_av_value())
+        self._convergence.append(self.get_diff())
 
+        #TRACK LAST N POLICIES (moving window)
+        keep = self._policyMemory
+        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+
+        self.n_episodes+=1
+        if (self.n_episodes >= self._schedulingSteps):
+            self.lr = min_lr
+            self.epsilon = min_epsilon
+            # diff = abs(self._av_value[-1]-self._av_value[-2])
+            av1 = np.average(np.array(self._av_value)[-10:])
+            av2 = np.average(np.array(self._av_value)[-20:-10])
+            diff = np.round(np.abs(av1 -av2)/((av1+av2)*0.5),3) #moving window average
+            if diff <= self._tollerance or (self.n_episodes==self.max_episodes):
+                self.set_referencePolicy()
+                return True
+        else:
+            self.lr -= self._update_lr
+            self.epsilon -= self._update_epsilon
+            return False
+    
+    def _makeGreedy_parallel(self):
 
         # self.lr = self.scheduled_lr[self.n_episodes]
         # self.epsilon = self.scheduled_epsilon[self.n_episodes]
@@ -434,32 +484,30 @@ class actionValue(object):
         self._convergence.append(self.get_diff())
 
         #TRACK LAST N POLICIES
-        keep = int(self._nscheduling_steps/2)
+        keep = self._policyMemory
         self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
 
         self.n_episodes+=1
         if self.n_episodes >= self._schedulingSteps:
             self.lr = min_lr
             self.epsilon = min_epsilon
-            #check convergence
-            # diff = abs(self._av_value[-1]-self._av_value[-2])
-            # if diff <= min_lr:
-            #     conv=True
+            #terminal condition
+            if (self.n_episodes==self.max_episodes):
+                self.set_referencePolicy()
+                return True
             
         else:
             # conv = False
             self.lr -= self._update_lr
             self.epsilon -= self._update_epsilon
 
-        return 
+            return False
 
         
-    def _makeGreedy_ganglia(self):
+    def _makeGreedy_multi(self):
         """
-        Same of above but without saving each value which would cost too much memory in this case
+        Same of above but without saving each value which would cost too much memory especially for ganglia
         """
-        # self.lr = self.scheduled_lr[self.n_episodes]
-        # self.epsilon = self.scheduled_epsilon[self.n_episodes]
         self.n_episodes+=1
 
         #UPDATE OBSERVABLES (costly)
@@ -468,58 +516,95 @@ class actionValue(object):
         self._convergence.append(self.get_diff())
 
         #TRACK LAST N POLICIES
-        keep = int(self._nscheduling_steps/2)
+        keep = self._policyMemory
         self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
 
         if self.n_episodes >= self._schedulingSteps:
             self.lr = min_lr
             self.epsilon = min_epsilon
-            #check convergence
-            # diff = abs(self._av_value[-1]-self._av_value[-2])
-            # if diff <= min_lr:
-            #     conv=True
+            if (self.n_episodes==self.max_episodes):
+                self.set_referencePolicy()
+                return True
             
         else:
             # conv = False
             self.lr -= self._update_lr
             self.epsilon -= self._update_epsilon
-    
-    def _get_onPolicy_action_multiagent(self,state):
-        new_action = []
-        # if self._multiAgent:
-        if self._parallelUpdate:
-            for k in range(self._nAgents):
-                # sind,_a = self._get_index(s[k])
-                # print(s[k],sind)
-                new_action.append(np.argmax(self._Q[state[k]]))
+            return False
+
+
+    def _makeGreedyAdaptive_multi(self):
+        '''Here I check convergence and stop updating selectively converged agents. This is done by making greedy converged Q matrix (epsilon=0) and changing the _agentUpdateSet'''
+
+        tollerance= min_lr
+        # self._value.append(self.get_value())
+        self._av_value.append(self.get_av_value())
+        self._convergence.append(self.get_diff())
+
+        #TRACK LAST N POLICIES (moving window)
+        keep = self._policyMemory
+        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+
+        self.n_episodes+=1
+        if (self.n_episodes >= self._schedulingSteps):
+            self.lr = min_lr
+            self.epsilon = min_epsilon
+            # diff = abs(self._av_value[-1]-self._av_value[-2])
+            # diff = np.round(np.abs(np.array(self._av_value)[-1,:] - np.array(self._av_value)[-2,:]),3)
+            av1 = np.average(np.array(self._av_value)[-10:,:],axis=0)
+            av2 = np.average(np.array(self._av_value)[-20:-10,:],axis=0)
+            diff = np.round(np.abs(av1 -av2)/((av1+av2)*0.5),3) #moving window average
+            conv_array= diff<=self._tollerance
+            if conv_array.any():
+                for a in self._agentUpdateSet:
+                    if conv_array[a]:
+                        self._agentUpdateSet.remove(a)
+                        self.epsilon[a]=0
+            if conv_array.all() or (self.n_episodes==self.max_episodes):
+                self.set_referencePolicy()
+                return True
         else:
-            #one Q function for each agent
-            for k in range(self._nAgents):
-                # sind,_a = self._get_index(s[k])
-                new_action.append(np.argmax(self._Q[k][state[k]]))
+            self.lr -= self._update_lr
+            self.epsilon -= self._update_epsilon
+            return False
+
         
-        return new_action
+    # def _get_onPolicy_action_multiagent(self,state):
+    #     new_action = []
+    #     # if self._multiAgent:
+    #     if self._parallelUpdate:
+    #         for k in range(self._nAgents):
+    #             # sind,_a = self._get_index(s[k])
+    #             # print(s[k],sind)
+    #             new_action.append(np.argmax(self._Q[state[k]]))
+    #     else:
+    #         #one Q function for each agent
+    #         for k in range(self._nAgents):
+    #             # sind,_a = self._get_index(s[k])
+    #             new_action.append(np.argmax(self._Q[k][state[k]]))
+        
+    #     return new_action
     
-    def _get_onPolicy_action_ganglia(self,state):
-        encoded_state = [interpret_binary(s) for s in state]
-        new_action = []
-        if self._parallelUpdate:
-            if self._singleActionConstraint:
-                for k in range(self._nAgents):
-                    new_action.append(make_binary(int(2**(np.argmax(self._Q[encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
-            else:
-                for k in range(self._nAgents):
-                        new_action.append(make_binary(np.argmax(self._Q[encoded_state[k]]),int(self._nsuckers/self._nAgents)))
-        else:
-            if self._singleActionConstraint:
-                for k in range(self._nAgents):
-                    new_action.append(make_binary(int(2**(np.argmax(self._Q[k][encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
-            else:
-                for k in range(self._nAgents):
-                        # sind,_a = self._get_index(s[k])
-                        # print(s[k],sind)
-                        new_action.append(make_binary(np.argmax(self._Q[k][encoded_state[k]]),int(self._nsuckers/self._nAgents)))
-        return new_action
+    # def _get_onPolicy_action_ganglia(self,state):
+    #     encoded_state = [interpret_binary(s) for s in state]
+    #     new_action = []
+    #     if self._parallelUpdate:
+    #         if self._singleActionConstraint:
+    #             for k in range(self._nAgents):
+    #                 new_action.append(make_binary(int(2**(np.argmax(self._Q[encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
+    #         else:
+    #             for k in range(self._nAgents):
+    #                     new_action.append(make_binary(np.argmax(self._Q[encoded_state[k]]),int(self._nsuckers/self._nAgents)))
+    #     else:
+    #         if self._singleActionConstraint:
+    #             for k in range(self._nAgents):
+    #                 new_action.append(make_binary(int(2**(np.argmax(self._Q[k][encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
+    #         else:
+    #             for k in range(self._nAgents):
+    #                     # sind,_a = self._get_index(s[k])
+    #                     # print(s[k],sind)
+    #                     new_action.append(make_binary(np.argmax(self._Q[k][encoded_state[k]]),int(self._nsuckers/self._nAgents)))
+    #     return new_action
     
 
         
@@ -583,21 +668,29 @@ class actionValue(object):
         """
         Returns an array representing the policy.
         """
-        #note that for multiagent I'm looping through dictionary keys, while for ganglia through
-        #Make it general for any scenario (multi-agent/ ganglia ecc)
-        policy_vector =[] #policy is a vector of dimension #states
+        #note that for multiagent I'm looping through dictionary keys, while for ganglia through indices
+        
+        # policy_vector =[] #policy is a vector of dimension #states
+        
+        
         # if I have more than one Q matrix there is one policy per matrix
-        if self._parallelUpdate:
+        if self._parallelUpdate :
+            policy = {}
             for k in self._Q:
-                policy_vector.append(np.argmax(self._Q[k]))
+                # policy_vector.append(np.argmax(self._Q[k]))
+                policy[k]=np.argmax(self._Q[k])
+            return policy
         else:
+            policies = [] #dimension nAgents
             for i in range(self._nAgents):
-                pv=[]
+                policy = {}
                 Q = self._Q[i]
                 for k in Q:
-                    pv.append(np.argmax(Q[k]))
-                policy_vector.append(pv)
-        return policy_vector
+                    policy[k] = np.argmax(Q[k])
+                    # pv.append(np.argmax(Q[k]))
+                # policy_vector.append(pv)
+                policies.append(policy)
+            return policies
     
 
 
@@ -665,18 +758,17 @@ class actionValue(object):
         self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
         self._fig_av_value.set_title(label='Average value')
         episodes = [e for e in range(self.n_episodes+1)]
-        self._fig_av_value.plot(episodes,self._av_value)
+        self._fig_av_value.plot(episodes,self._av_value,c='black')
         if labelPolicyChange:
             prop_cycle = plt.rcParams['axes.prop_cycle']
             colors = prop_cycle.by_key()['color']
-            
+            clrs=itertools.cycle(colors)
             for t in range(1,len(self._lastPolicies)):
                 difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
                 if difference != 0:
-                    color = colors[1]
-                else:
-                    color = colors[0]
-                self._fig_av_value.plot(episodes[self.n_episodes-self._nscheduling_steps+t],self._av_value[t],color)
+                    color = next(clrs)
+
+                self._fig_av_value.scatter(episodes[-t],self._av_value[-t],c=color,s=15)
 
     def _plot_av_value_noHive(self,labelPolicyChange=False):
         n = int(input("sucker (agent) number"))
@@ -685,25 +777,17 @@ class actionValue(object):
         self._fig_av_value.set_title(label='Average value sucker '+str(n))
         episodes = [e for e in range(self.n_episodes+1)]
         avValue = np.array(self._av_value)[:,n]
-        self._fig_av_value.plot(episodes,avValue)
+        self._fig_av_value.plot(episodes,avValue,c='black')
         if labelPolicyChange:
             prop_cycle = plt.rcParams['axes.prop_cycle']
             colors = prop_cycle.by_key()['color']
-            
+            clrs = itertools.cycle(colors)
             for t in range(1,len(self._lastPolicies)):
                 difference =np.sum(np.array(self._lastPolicies[-t-1][n])-np.array(self._lastPolicies[-t][n]))
-                # print(self._lastPolicies[-t-1][n])
-                # print(self._lastPolicies[-t][n])
-                # print(difference)
                 if difference != 0:
-                    color = colors[1]
-                    # print("here")
-                else:
-                    color = colors[0]
-                # print(color)
-                # print(episodes[-t],avValue[-t])
+                    color = next(clrs)
     
-                self._fig_av_value.scatter(episodes[-t],avValue[-t],c=color)
+                self._fig_av_value.scatter(episodes[-t],avValue[-t],c=color,s=15)
 
     def _plot_av_value_ganglia(self,labelPolicyChange=False):
         for n in range(self._nAgents):
@@ -712,37 +796,33 @@ class actionValue(object):
             self._fig_av_value.set_title(label='Average value learning for ganglion '+str(n))
             episodes = [e for e in range(self.n_episodes+1)]
             avValue = np.array(self._av_value)[:,n]
-            self._fig_av_value.plot(episodes,avValue)
+            self._fig_av_value.plot(episodes,avValue,c='black')
             if labelPolicyChange:
                 prop_cycle = plt.rcParams['axes.prop_cycle']
                 colors = prop_cycle.by_key()['color']
-                
+                clrs = itertools.cycle(colors)
                 for t in range(1,len(self._lastPolicies)):
                     difference =np.sum(np.array(self._lastPolicies[-t-1][n])-np.array(self._lastPolicies[-t][n]))
-                    if difference != 0:
-                        color = colors[1]
-                    else:
-                        color = colors[0]
-                    self._fig_av_value.plot(episodes[self.n_episodes-self._nscheduling_steps+t],avValue[t],color)
+                    if difference != 0 :
+                        color = next(clrs)
+                    self._fig_av_value.scatter(episodes[-t],avValue[-t],c = color,s=15)
 
     
-    def _plot_av_value_ganglia_hive(self,labelPolicyChange):
+    def _plot_av_value_ganglia_hive(self,labelPolicyChange=False):
         plt.figure()
         self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
         self._fig_av_value.set_title(label='Average value (hive) learning')
         episodes = [e for e in range(self.n_episodes+1)]
-        self._fig_av_value.plot(episodes,self._av_value)
+        self._fig_av_value.plot(episodes,self._av_value,c='black')
         if labelPolicyChange:
             prop_cycle = plt.rcParams['axes.prop_cycle']
             colors = prop_cycle.by_key()['color']
-            
+            clrs= itertools.cycle(colors)
             for t in range(1,len(self._lastPolicies)):
                 difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
-                if difference != 0:
-                    color = colors[1]
-                else:
-                    color = colors[0]
-                self._fig_av_value.plot(episodes[self.n_episodes-self._nscheduling_steps+t],self._av_value[t],color)
+                if difference != 0 :
+                    color = next(clrs)
+                self._fig_av_value.scatter(episodes[-t],self._av_value[-t],c=color,s=15)
 
     def _plot_convergence_hive(self):
         plt.figure()
@@ -764,3 +844,234 @@ class actionValue(object):
         self._fig_convergence.plot(episodes,convergence)
 
    
+
+   ####### NEW ##########
+    def set_referencePolicy(self,n_previous=1):
+        self._refPolicy = self._lastPolicies[-n_previous]
+        # print("current on policy = last -%d policy"%n_previous)
+
+
+    def evaluatePolicy(self,env,timeWindowActionMatrix=1000):
+        """ 
+            Implement some heuristic measures of the policy.
+            Can consider last n policies by the argument "which" (default is the last one).
+            Does not matter to be hive, since we consider this as a overall tentacle policy and not a per agent policy.
+            Returns also (normalized) average CM velocity
+        """
+
+        
+
+        if self._singleActionConstraint:
+            exit("Not supported")
+
+        actionMatrix = np.zeros((self._nsuckers,0),int)
+        evaluation_steps = 20000
+
+        # self.set_referencePolicy(which)
+        visitedStates = set()
+        cumulativeReward = 0
+        n_activeSuckers = 0
+
+        
+        state_frequency = {}
+        if self._ganglia==False:
+            # print("MULTIAGENT")
+            for k in stateName:
+                state_frequency[k]=0
+        else:
+            # print("CONTROL CENTER")
+            for k in range(self.state_space_dim):
+                state_frequency[k]=0
+        
+        # print(state_frequency)
+        # state_frequency = np.zeros(n_states)
+        actionPerState = analysis_utilities.actionMapState_dict(self._refPolicy,self._ganglia,self._parallelUpdate,self._nsuckers,self._nAgents)
+        # print("Active sucker per state for the given policy with multiplicity (for many agents)")
+        # print(actionPerState)
+
+
+
+        # ******** LOOP TO GATHER STATS **********
+        env.reset()
+        env.deltaT = 0.1
+        env.equilibrate(1000)
+        state = env.get_state()
+        for k in range(evaluation_steps):
+            action,encoded_state = self.getOnPolicyAction(state,returnEncoding=True)
+            state,r,_t=env.step(action)
+            cumulativeReward += r
+            if self._ganglia:
+                action = [a for al in action for a in al] #list of list --> list
+            actionMatrix = np.column_stack([actionMatrix,np.array(action)])
+            n_activeSuckers += sum(action)
+            for sid in encoded_state:
+                visitedStates.add(sid)
+                state_frequency[sid] +=1 
+        norm_vel = env.get_averageVel()/env.x0
+        # print("NORMALIZED CM VELOCITY = ",norm_vel)
+    # ************
+
+        averageActiveSuckers = n_activeSuckers/(k+1)
+        # state_frequency = state_frequency/((k+1))
+        #NORMALIZATION
+        state_frequency.update((key, val/(k+1)) for key, val in state_frequency.items())
+        # print(state_frequency)
+        if self._ganglia==False:
+            #need to correct for counting several time state for each agent (state here is still a property of each sucker)
+            for s in stateMap_intermediate.values():
+                state_frequency[s] = state_frequency[s]/(self._nAgents-2) #base and tip have no multiplicity
+        else:
+            #here state is a ganglion state with the multiplicity of the number of ganglion (one state per ganglion)
+            state_frequency.update((key, val/self._nAgents) for key, val in state_frequency.items())
+            # state_frequency = state_frequency/self._nAgents
+        # print("frequency state visits:")
+        # print(state_frequency)
+
+        weighted_actionPerState = {key:actionPerState[key] * state_frequency[key] for key in state_frequency }
+        weighted_averageActivity = sum(weighted_actionPerState.values())
+        
+        print("Time average average active suckers for the policy (un-normalized and normalized):")
+        print(averageActiveSuckers,averageActiveSuckers/self._nsuckers)
+        print("Weighted policy measure (un-normalized and normalized)")
+        print(weighted_averageActivity,weighted_averageActivity/self._nsuckers)
+
+        print("number of visited states out of all possible states:")
+        print(len(visitedStates),self.state_space_dim)
+        
+        return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates,weighted_actionPerState
+        
+    def getOnPolicyAction(self,state,returnEncoding = False):
+        out_action=[]
+        if self._ganlgia==False:
+            encoded_state = state
+            if self._parallelUpdate:
+                # encoded_state = [stateIndexMap[s] for s in state]
+                for k in range(self._nsuckers):
+                    out_action.append(self._refPolicy[encoded_state[k]])
+            else:
+                # encoded_state_multi = [stateIndexMap_multi[s] for s in state]
+                # encoded_state = [stateIndexMap[s] for s in state]
+                for k in range(self._nAgents):
+                    out_action.append(self._refPolicy[k][encoded_state[k]])
+            
+        else:
+            #GANGLIA (CONTROL CENTER) SCENARIO
+            #here we need a specific binary decoding for the actions and encoding for states
+            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
+            padding= int(self._nsuckers/self._nAgents)
+            if self._parallelUpdate:
+                for k in range(self._nAgents):
+                    out_action.append(make_binary(self._refPolicy[encoded_state[k]],padding))
+            else:
+                for k in range(self._nAgents):
+                    # print(k,self._refPolicy[k])
+                    out_action.append(make_binary(self._refPolicy[k][encoded_state[k]],padding))
+        if returnEncoding:
+            return out_action,encoded_state
+        else:
+            return out_action
+        
+
+
+    def evaluateTrivialPolicy(self,env,isRandom=True):
+        """ 
+            State frequency under random policy
+        """
+
+        if isRandom:
+            print("Evaluating Random policy")
+            self._getTrivialAction = self._getRandomAction
+        else:
+            print("Evaluating Null policy")
+            self._getTrivialAction = self._getNullAction
+        # print(env.deltaT)
+        evaluation_steps = 20000
+
+        # self.set_referencePolicy(which)
+        visitedStates = set()
+        cumulativeReward = 0
+        n_activeSuckers = 0
+
+        
+        state_frequency = {}
+        if self._ganglia==False:
+            # print("MULTIAGENT")
+            for k in stateName:
+                state_frequency[k]=0
+        else:
+            # print("CONTROL CENTER")
+            for k in range(self.state_space_dim):
+                state_frequency[k]=0
+        
+        # print(state_frequency)
+        
+        # ******** LOOP TO GATHER STATS **********
+        env.reset()
+        env.equilibrate(1000)
+        state = env.get_state()
+        for k in range(evaluation_steps):
+            action,encoded_state = self._getTrivialAction(state,returnEncoding=True)
+            state,r,_t=env.step(action)
+            cumulativeReward += r
+            if self._ganglia:
+                action = [a for al in action for a in al] #list of list --> list
+            n_activeSuckers += sum(action)
+            for sid in encoded_state:
+                visitedStates.add(sid)
+                state_frequency[sid] +=1 
+    # ************
+
+        averageActiveSuckers = n_activeSuckers/(k+1)
+
+        state_frequency.update((key, val/(k+1)) for key, val in state_frequency.items())
+       
+        if self._ganglia==False:
+            for s in stateMap_intermediate.values():
+                state_frequency[s] = state_frequency[s]/(self._nAgents-2) #base and tip have no multiplicity
+        else:
+            state_frequency.update((key, val/self._nAgents) for key, val in state_frequency.items())
+           
+        # print("frequency state visits:")
+        # print(state_frequency)
+
+        print("number of visited states out of all possible states:")
+        print(len(visitedStates),self.state_space_dim)
+
+        # print("Average active suckers (for null policy trivial, for random should tend to half?)")
+        # print(averageActiveSuckers)
+        
+        return state_frequency,visitedStates
+    
+
+    def _getRandomAction(self,state,returnEncoding = False):
+        action=[]
+        for k in range(self._nAgents):
+                action.append(np.random.randint(0,self.action_space_dim))
+        if self._ganglia==False:
+            encoded_state = state
+            out_action = action
+        else:
+            #Control center scenarion
+            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
+            padding= int(self._nsuckers/self._nAgents)
+            out_action = [make_binary(a,padding) for a in action]
+        if returnEncoding:
+            return out_action,encoded_state
+        else:
+            return out_action
+        
+    def _getNullAction(self,state,returnEncoding = False):
+        action=[]
+        for k in range(self._nAgents):
+                action.append(0)
+        if self._ganglia==False:
+            encoded_state = state
+            out_action = action
+        else:
+            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
+            padding= int(self._nsuckers/self._nAgents)
+            out_action = [make_binary(a,padding) for a in action]
+        if returnEncoding:
+            return out_action,encoded_state
+        else:
+            return out_action
