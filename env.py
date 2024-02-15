@@ -276,7 +276,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True, nGanglia =1): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=0.1,is_Ganglia = False,isOverdamped = True, nGanglia =1): 
          #control cluster refers to the number of suckers, the total number of spring involved is n_suckers-1
         
         x0 = tentacle_length/n_suckers
@@ -289,12 +289,12 @@ class   Environment(object):
         self.omega = omega 
         self.tentacle_length = tentacle_length
         print("FINITE TENTACLE")
-        print('x0\tamplitude\twavelength\ttentacle length')
-        print('%.3f\t%.4f\t\t%.1f\t\t%.2f'%(x0,amplitude,self.wavelength,tentacle_length))
+        print('x0\tamplitude\twavelength\ttentacle length\tomega')
+        print('%.3f\t%.4f\t\t%.1f\t\t%.2f\t\t%.2f'%(x0,amplitude,self.wavelength,tentacle_length,omega))
         print('n suckers\tperiodicity')
         print("%d\t%d"%(self._nsuckers,self.N))
         
-        self.isMultiagent = is_multiagent #need to characterize type of state returned..
+        self.isGanglia = is_Ganglia #need to characterize type of state returned..
 
         
         self._isOverdamped = isOverdamped
@@ -302,7 +302,7 @@ class   Environment(object):
         self.carrierMode = carrierMode
         
        
-        print("Carrier modes= ",carrierMode)
+        # print("Carrier modes= ",carrierMode)
         box = Box(sim_shape)
         self._box = box
         
@@ -372,10 +372,10 @@ class   Environment(object):
         
 
         self.info ={}
-        if is_multiagent == True:
+        if is_Ganglia == False:
             # self._nagents = n_suckers
             self.get_state=self._get_state_multiagent
-            print("**Multiagent**")
+            print("**SUCKER AGENT**")
             # self.action_space = 2 # sucker can turn on friction or turn it off
             # self.state_space = 8#4
             self.action_space_name = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
@@ -383,6 +383,7 @@ class   Environment(object):
             self.state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
             self.state_space = 8
         else:
+            print("** CONTROL CENTER **")
             self.step = self._step_ganglia
             controlClusterSize = int(n_suckers/nGanglia)
             if ((n_suckers)%controlClusterSize) != 0:
@@ -409,7 +410,7 @@ class   Environment(object):
 
         self.info["learning space"]=(self.state_space,self.action_space)
         self.info["n suckers"]=self._nsuckers
-        self.info["multiagent"] = self.isMultiagent
+        self.info["isGanglia"] = self.isGanglia
     @property
     def isOverdamped(self):
         return self._isOverdamped
@@ -499,7 +500,10 @@ class   Environment(object):
         self.cumulatedReward = 0 #total reward per episode
 
     def equilibrate(self,steps):
-        action = [0]*self._nsuckers
+        if self.isMultiagent:
+            action = [0]*self._nsuckers
+        else:
+            action = [[0]*self._nsuckers]
         for k in range(steps):
             self.step(action)
         self._vel = []
@@ -737,15 +741,15 @@ class   Environment(object):
         #reward = vel #numerically more stable scheme since magnitude of reward always consistent
 
         #ALTERNATIVE: only give -1 reward for backward and make wall reachable in training.. (so that less negative reward if episode ends)
-       
+        # reward = abs(vel)
         if vel>0:
             reward = vel #to promote higher speed..
         else:
             reward = -1
         
-        if touching[-1]:
-            print(touching)
-            terminal = True
+        # if touching[-1]:
+        #     print(touching)
+        #     terminal = True
             # reward = 0
             # reward = (self._episodeSteps - self._nsteps) * self.get_averageVel()
             # # reward = self.get_averageVel() * self._box.boundary[0]/self._phase_velocity
