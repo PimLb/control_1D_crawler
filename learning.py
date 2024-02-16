@@ -8,10 +8,10 @@ import analysis_utilities
 
 #good parameters multiagents:
 max_lr = 0.1# was 0.3 learning rate
-min_lr = 0.001# was 0.05 then 0.01, for hive 0.0025
+# was 0.05 then 0.01, for hive 0.0025
 gamma = 0.999#discount 0.9 to reflect upon..
 max_epsilon = 0.9
-min_epsilon =0.001
+
 
 
 
@@ -30,12 +30,8 @@ actionState=[' not anchoring',' anchoring']
 
 # stateIndexMap = {'->|<-':0,'->|->':1,'->|tip':6,'<-|<-':2,'<-|->':3,'<-|tip':7,'base|<-':4,'base|->':5}
 
-
-
-
-
 class actionValue(object):
-    def __init__(self,info:dict,max_episodes=1500,hiveUpdate = True, singleActionConstraint = False,adaptiveScheduling=False,scheduling_steps=1000) -> None:
+    def __init__(self,info:dict,max_episodes=1500,hiveUpdate = True, singleActionConstraint = False,adaptiveScheduling=False,scheduling_steps=1000,min_epsilon =0.001,min_lr = 0.001) -> None:
 
 
         #Learning space a richer container
@@ -45,18 +41,19 @@ class actionValue(object):
         
         self.state_space_dim = learning_space[0]
         self.action_space_dim = learning_space[1]
-        # self.dim = learning_space
-        # self.epsilon = max_epsilon
+        
         self.lr = max_lr
         self.discount = gamma
         self.max_episodes = max_episodes
         # scheduling_steps = total_episodes - int(total_episodes/3) #total_episodes
         print("n scheduling episodes =", scheduling_steps)
         
-        self._policyMemory = int((max_episodes - scheduling_steps)/2)
+        self._policyMemory = int((max_episodes - scheduling_steps))
         self._schedulingSteps = scheduling_steps
         print("min epsilon =",min_epsilon)
         print("min lr =",min_lr)
+        self.min_lr = min_lr
+        self.min_epsilon = min_epsilon
         if adaptiveScheduling:
             print("Adaptive scheduling")
             print("maximum non scheduled episodes =", max_episodes - scheduling_steps)
@@ -69,6 +66,8 @@ class actionValue(object):
         self.n_episodes = 0
         self._lastPolicies = []
         self._refPolicy = None
+        self._av_value = []
+        self._convergence = []
         # self.scheduled_epsilon = [max_epsilon-self._upgrade_e*i for i in range(scheduling_steps)] + [min_epsilon] * (total_episodes-scheduling_steps)
         # self.scheduled_lr = [max_lr-self._upgrade_lr*i for i in range(scheduling_steps)] + [min_lr] * (total_episodes-scheduling_steps)
         
@@ -78,11 +77,13 @@ class actionValue(object):
             self._nAgents = self._nsuckers #IMPORTANT
 
             # self.get_onPolicy_action = self._get_onPolicy_action_multiagent
+            self.updateObs = self._updateObsSuckerAgent
+            self._value =[] #this observable too messy and unreadable for ganglia. So I have it only for sucker based agents
             
             if hiveUpdate:
-                self.epsilon = max_epsilon
                 self._parallelUpdate = True
                 print("\n** <WARNING>:  HIVE UPDATE **\n")
+
                 self.update = self._update_Q_parallel
                 self.get_action = self._get_action_hive
                 Q={}
@@ -97,33 +98,22 @@ class actionValue(object):
                 self._Q = Q
                 #convergence observables:
                 self._oldQ = copy.deepcopy(self._Q)
-                self._convergence = []
-                #VALUE
-                # second index to contain correspondent policy. For 2 action space, 0 or 1 (= argmax) to be associated to color in plot
-                self._value = []
-                self._av_value = []
-                self.get_value = self._get_value_hive
-                self.get_av_value = self._get_av_value_hive
-                self.get_diff = self._get_diff_hive
-                self._value.append(self.get_value())
-                self._av_value.append(self.get_av_value())
-                #plots
+                
+                
+               
                 self.plot_value = self._plot_value_hive
-                self.plot_convergence = self._plot_convergence_hive
-                self.plot_av_value = self._plot_av_value_hive
+                
             else:
                 self._parallelUpdate = False 
                 self.update = self._update_Q_single
                 self.get_action = self._get_action_single
                 self._Q = []
-                self.epsilon = [] #in principle one epsilon per agent so that I can get greedy policy selectively
+                
                 print("\n** <WARNING>:  NOT HIVE UPDATE **\n")
                 print("A Q matrix per agent")
                 print("(however epsilon, lr and gamma are universal)")
-                self._value =[]
-                self._av_value = []
+    
                 self._oldQ =[]
-                self._convergence = []
                 
                 #BASE
                 Q={}
@@ -132,7 +122,7 @@ class actionValue(object):
                     Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
-                self.epsilon.append(max_epsilon)
+             
                 Q={}
                 internal_states = stateMap_intermediate.values()
                 for k in internal_states:
@@ -140,7 +130,6 @@ class actionValue(object):
                 for i in range(1,self._nAgents-1):
                     self._Q.append(copy.deepcopy(Q)) 
                     self._oldQ.append(copy.deepcopy(Q))
-                    self.epsilon.append(max_epsilon)
                 
                 #TIP
                 Q={}
@@ -149,20 +138,13 @@ class actionValue(object):
                     Q[k] = np.random.random(self.action_space_dim)
                 self._Q.append(copy.deepcopy(Q)) 
                 self._oldQ.append(copy.deepcopy(Q))
-                self.epsilon.append(max_epsilon)
 
-                self.get_diff = self._get_diff_multiagent
-                self.get_value = self._get_value
-                self.get_av_value = self._get_av_value
-                self._value.append(self.get_value())
-                self._av_value.append(self.get_av_value())
+                
+                
                 #plots
-                self.plot_value = self._plot_value_noHive
-                self.plot_convergence = self._plot_convergence_noHive
+                self.plot_value = self._plot_value_noHive  
                 self.plot_av_value = self._plot_av_value_noHive
 
-                self.epsilon=np.array(self.epsilon)
-                
 
   
         else:   
@@ -170,6 +152,7 @@ class actionValue(object):
             nGanglia = info["n ganglia"]
 
             self._nAgents = nGanglia
+            self.updateObs = self._updateObsGanglia
             # self.get_onPolicy_action = self._get_onPolicy_action_ganglia
             # self.makeGreedy = self._makeGreedy_ganglia
             print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
@@ -184,8 +167,8 @@ class actionValue(object):
                 self.epsilon = max_epsilon
                 print("\n** <WARNING>: HIVE UPDATE **\n")
                 self._parallelUpdate = True
-                self.get_value = self._get_value_hive
-                self.get_av_value = self._get_av_value_hive
+                # self.get_value = self._get_value_hive
+                # self.get_av_value = self._get_av_value_hive
                 if singleActionConstraint:
                     print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
                     self._singleActionConstraint = True
@@ -202,17 +185,17 @@ class actionValue(object):
                 
                 self._Q = copy.deepcopy(Q)
                 self._oldQ = copy.deepcopy(Q)
-                self.get_diff = self._get_diff_hive
-                self._av_value = []
-                self._av_value.append(self.get_av_value())
-                self._convergence = []
-                self.plot_av_value = self._plot_av_value_ganglia_hive
-                self.plot_convergence = self._plot_convergence_hive
+                
+                
+                # self._av_value.append(self.get_av_value())
+                
+                # self.plot_av_value = self._plot_av_value_ganglia_hive
+                
             else:
                 self._parallelUpdate = False
-                self.get_value = self._get_value
-                self.get_av_value = self._get_av_value
-                self.epsilon = [] #in principle one epsilon per agent so that I can get greedy policy selectively (not doing for lr since I can just stop updating if needed..)
+                # self.get_value = self._get_value
+                # self.get_av_value = self._get_av_value
+                
                 
                 if singleActionConstraint:
                     print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
@@ -233,50 +216,82 @@ class actionValue(object):
                     #1 Q matrix per control center (ganglia)
                     self._Q.append(copy.deepcopy(Q))
                     self._oldQ.append(copy.deepcopy(Q))
-                    self.epsilon.append(max_epsilon)
-                self.get_diff = self._get_diff_multiagent
-                self._av_value = []
-                self._av_value.append(self.get_av_value())
-                self._convergence = []
+                    
+                
+                # self._av_value.append(self.get_av_value())
+                
                 self.plot_av_value = self._plot_av_value_ganglia
-                self.plot_convergence = self._plot_convergence_noHive
-                self.epsilon = np.array(self.epsilon)
+                
+                
             print("possible actions combitations per ganglion = %d, for a total of %d suckers per ganglion"%(self.action_space_dim,suckers_perGanglion))
 
-
-            #NEW container with agents to be updated
-            self._agentUpdateSet = set([a for a in range(self._nAgents)])
-
-            if self._parallelUpdate:
-                if adaptiveScheduling:
-                    self._tollerance = min_lr #1%
-                    print("<WARNING>: Adaptive (hive) scheduling tollerance = %.3f"%self._tollerance)
-                    self.makeGreedy = self._makeGreedyAdaptive_parallel
-                else:
-                    self.makeGreedy = self._makeGreedy_parallel
+        if self._parallelUpdate:
+            self.epsilon = max_epsilon
+            self.get_diff = self._get_diff_hive
+            self.get_value = self._get_value_hive
+            self.get_av_value = self._get_av_value_hive
+            self.plot_convergence = self._plot_convergence_hive
+            self.plot_av_value = self._plot_av_value_hive
+            if adaptiveScheduling:
+                self._tollerance = min_lr 
+                print("<WARNING>: Adaptive (hive) scheduling tollerance = %.3f"%self._tollerance)
+                self.makeGreedy = self._makeGreedyAdaptive_parallel
             else:
-                if adaptiveScheduling:
-                    self._tollerance = min_lr #1%
-                    print("<WARNING>: Adaptive scheduling tollerance = %.3f. Convergence checked for each agent (if more than one.)"%self._tollerance)
-                    self.makeGreedy = self._makeGreedyAdaptive_multi
-                else:
-                    self.makeGreedy = self._makeGreedy_multi
-
-    
-    def _get_index(self,state,action=0):
-        # if self._multiAgent:
-            #here action is a scalar and state a 2 elements list. 
-            # I need to consider dummy action argument, when I need only state
-            #i = interpret_binary(state)
-        i = interpret_thernary(state)
-        j = action
-        # else:
-        #     #to check..
-        #     # i = interpret_binary(state)
-        #     i = interpret_thernary(state)
-        #     j = interpret_binary(action)
+                self.makeGreedy = self._makeGreedy_parallel
             
-        return i,j
+        else:
+            self.epsilon = np.array([max_epsilon]*self._nAgents) #in principle one epsilon per agent so that I can get greedy policy selectively (not doing for lr since I can just stop updating if needed..)
+            self.get_diff = self._get_diff_multiagent
+            self.get_value = self._get_value
+            self.get_av_value = self._get_av_value
+            self.plot_convergence = self._plot_convergence_noHive
+            
+            #NEW container with agents to be updated
+            # in the multiagent scenario I have in principle one epsilon per Q matrix
+            # So far lr identical for all
+            self._agentUpdateSet = set([a for a in range(self._nAgents)])
+            if adaptiveScheduling:
+                self._tollerance = min_lr 
+                print("<WARNING>: Adaptive scheduling tollerance = %.3f. Convergence checked for each agent (if more than one.)"%self._tollerance)
+                self.makeGreedy = self._makeGreedyAdaptive_multi
+            else:
+                self.makeGreedy = self._makeGreedy_multi
+
+        self.updateObs()
+
+    def _updateObsSuckerAgent(self):
+        #VALUE
+        # second index to contain correspondent policy. For 2 action space, 0 or 1 (= argmax) to be associated to color in plot
+        self._value.append(self.get_value())
+        self._av_value.append(self.get_av_value())
+        self._convergence.append(self.get_diff())
+        #TRACK LAST N POLICIES
+        keep = self._policyMemory
+        self._lastPolicies = self._lastPolicies[-keep:] + [self.getPolicy()]
+        
+        
+    def _updateObsGanglia(self):
+        self._av_value.append(self.get_av_value())
+        self._convergence.append(self.get_diff())
+        #TRACK LAST N POLICIES
+        keep = self._policyMemory
+        self._lastPolicies = self._lastPolicies[-keep:] + [self.getPolicy()]
+   
+    
+    # def _get_index(self,state,action=0):
+    #     # if self._multiAgent:
+    #         #here action is a scalar and state a 2 elements list. 
+    #         # I need to consider dummy action argument, when I need only state
+    #         #i = interpret_binary(state)
+    #     i = interpret_thernary(state)
+    #     j = action
+    #     # else:
+    #     #     #to check..
+    #     #     # i = interpret_binary(state)
+    #     #     i = interpret_thernary(state)
+    #     #     j = interpret_binary(action)
+            
+    #     return i,j
     def _update_Q_parallel(self,newstate,state,action,reward):
         '''
         Update the Q function, return new action.
@@ -443,22 +458,17 @@ class actionValue(object):
             decoded_newaction.append(make_binary(int(2**(new_action[i]-1.)),int(self._nsuckers/self._nAgents)))
        
         return decoded_newaction
+    
 
     def _makeGreedyAdaptive_parallel(self):
         '''
         Here I check convergence and stop updating if Q converged
         '''
-        self._value.append(self.get_value())
-        self._av_value.append(self.get_av_value())
-        self._convergence.append(self.get_diff())
-
-        #TRACK LAST N POLICIES (moving window)
-        keep = self._policyMemory
-        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+        self.updateObs()
 
         self.n_episodes+=1
         if (self.n_episodes >= self._schedulingSteps):
-            self.lr = min_lr
+            self.lr = self.min_lr
             self.epsilon = min_epsilon
             # diff = abs(self._av_value[-1]-self._av_value[-2])
             av1 = np.average(np.array(self._av_value)[-10:])
@@ -473,29 +483,17 @@ class actionValue(object):
             return False
     
     def _makeGreedy_parallel(self):
-
-        # self.lr = self.scheduled_lr[self.n_episodes]
-        # self.epsilon = self.scheduled_epsilon[self.n_episodes]
-        
-
         #UPDATE OBSERVABLES (costly)
-        self._value.append(self.get_value())
-        self._av_value.append(self.get_av_value())
-        self._convergence.append(self.get_diff())
-
-        #TRACK LAST N POLICIES
-        keep = self._policyMemory
-        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+        self.updateObs()
 
         self.n_episodes+=1
         if self.n_episodes >= self._schedulingSteps:
-            self.lr = min_lr
-            self.epsilon = min_epsilon
+            self.lr = self.min_lr
+            self.epsilon = self.min_epsilon
             #terminal condition
             if (self.n_episodes==self.max_episodes):
                 self.set_referencePolicy()
-                return True
-            
+                return True         
         else:
             # conv = False
             self.lr -= self._update_lr
@@ -506,22 +504,16 @@ class actionValue(object):
         
     def _makeGreedy_multi(self):
         """
-        Same of above but without saving each value which would cost too much memory especially for ganglia
+        here epsilon is in principle different for each
         """
         self.n_episodes+=1
 
         #UPDATE OBSERVABLES (costly)
-        
-        self._av_value.append(self.get_av_value())
-        self._convergence.append(self.get_diff())
-
-        #TRACK LAST N POLICIES
-        keep = self._policyMemory
-        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+        self.updateObs()  
 
         if self.n_episodes >= self._schedulingSteps:
-            self.lr = min_lr
-            self.epsilon = min_epsilon
+            self.lr = self.min_lr
+            self.epsilon[:] = self.min_epsilon
             if (self.n_episodes==self.max_episodes):
                 self.set_referencePolicy()
                 return True
@@ -534,21 +526,16 @@ class actionValue(object):
 
 
     def _makeGreedyAdaptive_multi(self):
-        '''Here I check convergence and stop updating selectively converged agents. This is done by making greedy converged Q matrix (epsilon=0) and changing the _agentUpdateSet'''
+        '''
+        Here I check convergence and stop updating selectively converged agents. This is done by making greedy converged Q matrix (epsilon=0) and changing the _agentUpdateSet
+        '''
 
-        tollerance= min_lr
-        # self._value.append(self.get_value())
-        self._av_value.append(self.get_av_value())
-        self._convergence.append(self.get_diff())
-
-        #TRACK LAST N POLICIES (moving window)
-        keep = self._policyMemory
-        self._lastPolicies = self._lastPolicies[:keep] + [self.getPolicy()]
+        self.updateObs()
 
         self.n_episodes+=1
         if (self.n_episodes >= self._schedulingSteps):
             self.lr = min_lr
-            self.epsilon = min_epsilon
+            self.epsilon = self.min_epsilon
             # diff = abs(self._av_value[-1]-self._av_value[-2])
             # diff = np.round(np.abs(np.array(self._av_value)[-1,:] - np.array(self._av_value)[-2,:]),3)
             av1 = np.average(np.array(self._av_value)[-10:,:],axis=0)
@@ -691,8 +678,43 @@ class actionValue(object):
                 # policy_vector.append(pv)
                 policies.append(policy)
             return policies
-    
+        
 
+    def set_referencePolicy(self,n_previous=1):
+        self._refPolicy = self._lastPolicies[-n_previous]
+        # print("current on policy = last -%d policy"%n_previous)
+
+        
+    def getOnPolicyAction(self,state,returnEncoding = False):
+        out_action=[]
+        if self._ganglia==False:
+            encoded_state = state
+            if self._parallelUpdate:
+                # encoded_state = [stateIndexMap[s] for s in state]
+                for k in range(self._nsuckers):
+                    out_action.append(self._refPolicy[encoded_state[k]])
+            else:
+                # encoded_state_multi = [stateIndexMap_multi[s] for s in state]
+                # encoded_state = [stateIndexMap[s] for s in state]
+                for k in range(self._nAgents):
+                    out_action.append(self._refPolicy[k][encoded_state[k]])
+            
+        else:
+            #GANGLIA (CONTROL CENTER) SCENARIO
+            #here we need a specific binary decoding for the actions and encoding for states
+            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
+            padding= int(self._nsuckers/self._nAgents)
+            if self._parallelUpdate:
+                for k in range(self._nAgents):
+                    out_action.append(make_binary(self._refPolicy[encoded_state[k]],padding))
+            else:
+                for k in range(self._nAgents):
+                    # print(k,self._refPolicy[k])
+                    out_action.append(make_binary(self._refPolicy[k][encoded_state[k]],padding))
+        if returnEncoding:
+            return out_action,encoded_state
+        else:
+            return out_action
 
     def _plot_value_hive(self):
         plt.figure(figsize=(10, 6))
@@ -756,15 +778,18 @@ class actionValue(object):
     def _plot_av_value_hive(self,labelPolicyChange=False):
         plt.figure()
         self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
-        self._fig_av_value.set_title(label='Average value')
+        self._fig_av_value.set_title(label='Average value (hive) learning')
         episodes = [e for e in range(self.n_episodes+1)]
         self._fig_av_value.plot(episodes,self._av_value,c='black')
         if labelPolicyChange:
             prop_cycle = plt.rcParams['axes.prop_cycle']
             colors = prop_cycle.by_key()['color']
             clrs=itertools.cycle(colors)
+            color = next(clrs)
             for t in range(1,len(self._lastPolicies)):
-                difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
+                before = np.array(list(self._lastPolicies[-t-1].values()))
+                after = np.array(list(self._lastPolicies[-t].values()))
+                difference =np.sum(before-after)
                 if difference != 0:
                     color = next(clrs)
 
@@ -782,8 +807,11 @@ class actionValue(object):
             prop_cycle = plt.rcParams['axes.prop_cycle']
             colors = prop_cycle.by_key()['color']
             clrs = itertools.cycle(colors)
+            color = next(clrs)
             for t in range(1,len(self._lastPolicies)):
-                difference =np.sum(np.array(self._lastPolicies[-t-1][n])-np.array(self._lastPolicies[-t][n]))
+                before = np.array(list(self._lastPolicies[-t-1][n].values()))
+                after = np.array(list(self._lastPolicies[-t][n].values()))
+                difference =np.sum(before-after)
                 if difference != 0:
                     color = next(clrs)
     
@@ -801,28 +829,31 @@ class actionValue(object):
                 prop_cycle = plt.rcParams['axes.prop_cycle']
                 colors = prop_cycle.by_key()['color']
                 clrs = itertools.cycle(colors)
+                color = next(clrs)
                 for t in range(1,len(self._lastPolicies)):
-                    difference =np.sum(np.array(self._lastPolicies[-t-1][n])-np.array(self._lastPolicies[-t][n]))
+                    before = np.array(list(self._lastPolicies[-t-1][n].values()))
+                    after = np.array(list(self._lastPolicies[-t][n].values()))
+                    difference =np.sum(before-after)
                     if difference != 0 :
                         color = next(clrs)
                     self._fig_av_value.scatter(episodes[-t],avValue[-t],c = color,s=15)
 
     
-    def _plot_av_value_ganglia_hive(self,labelPolicyChange=False):
-        plt.figure()
-        self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
-        self._fig_av_value.set_title(label='Average value (hive) learning')
-        episodes = [e for e in range(self.n_episodes+1)]
-        self._fig_av_value.plot(episodes,self._av_value,c='black')
-        if labelPolicyChange:
-            prop_cycle = plt.rcParams['axes.prop_cycle']
-            colors = prop_cycle.by_key()['color']
-            clrs= itertools.cycle(colors)
-            for t in range(1,len(self._lastPolicies)):
-                difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
-                if difference != 0 :
-                    color = next(clrs)
-                self._fig_av_value.scatter(episodes[-t],self._av_value[-t],c=color,s=15)
+    # def _plot_av_value_ganglia_hive(self,labelPolicyChange=False):
+    #     plt.figure()
+    #     self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
+    #     self._fig_av_value.set_title(label='Average value (hive) learning')
+    #     episodes = [e for e in range(self.n_episodes+1)]
+    #     self._fig_av_value.plot(episodes,self._av_value,c='black')
+    #     if labelPolicyChange:
+    #         prop_cycle = plt.rcParams['axes.prop_cycle']
+    #         colors = prop_cycle.by_key()['color']
+    #         clrs= itertools.cycle(colors)
+    #         for t in range(1,len(self._lastPolicies)):
+    #             difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
+    #             if difference != 0 :
+    #                 color = next(clrs)
+    #             self._fig_av_value.scatter(episodes[-t],self._av_value[-t],c=color,s=15)
 
     def _plot_convergence_hive(self):
         plt.figure()
@@ -842,14 +873,27 @@ class actionValue(object):
         episodes = [e for e in range(self.n_episodes)]
         convergence = np.array(self._convergence)[:,n]
         self._fig_convergence.plot(episodes,convergence)
+    
+    def getOnpolicyActionMatrix(self,env,timeFrame = 2000):
+        '''
+        Returns the time series of all action played during the execution of the active policy (the one in self._refPolicy)
+        '''
+        actionMatrix = np.zeros((self._nsuckers,0),int)
+        env.reset()
+        env.deltaT = 0.1
+        env.equilibrate(1000)
+        state = env.get_state()
+        for k in range(timeFrame):
+            action,encoded_state = self.getOnPolicyAction(state,returnEncoding=True)
+            state,r,_t=env.step(action)
+            if self._ganglia:
+                action = [a for al in action for a in al] #list of list --> list
+            actionMatrix = np.column_stack([actionMatrix,np.array(action)])
 
-   
+        #just a check
+        print("average normalized velocity = ",env.get_averageVel()/env.x0)
 
-   ####### NEW ##########
-    def set_referencePolicy(self,n_previous=1):
-        self._refPolicy = self._lastPolicies[-n_previous]
-        # print("current on policy = last -%d policy"%n_previous)
-
+        return actionMatrix
 
     def evaluatePolicy(self,env,timeWindowActionMatrix=1000):
         """ 
@@ -864,7 +908,7 @@ class actionValue(object):
         if self._singleActionConstraint:
             exit("Not supported")
 
-        actionMatrix = np.zeros((self._nsuckers,0),int)
+        # actionMatrix = np.zeros((self._nsuckers,0),int)
         evaluation_steps = 20000
 
         # self.set_referencePolicy(which)
@@ -902,7 +946,7 @@ class actionValue(object):
             cumulativeReward += r
             if self._ganglia:
                 action = [a for al in action for a in al] #list of list --> list
-            actionMatrix = np.column_stack([actionMatrix,np.array(action)])
+            # actionMatrix = np.column_stack([actionMatrix,np.array(action)])
             n_activeSuckers += sum(action)
             for sid in encoded_state:
                 visitedStates.add(sid)
@@ -930,46 +974,15 @@ class actionValue(object):
         weighted_actionPerState = {key:actionPerState[key] * state_frequency[key] for key in state_frequency }
         weighted_averageActivity = sum(weighted_actionPerState.values())
         
-        print("Time average average active suckers for the policy (un-normalized and normalized):")
-        print(averageActiveSuckers,averageActiveSuckers/self._nsuckers)
-        print("Weighted policy measure (un-normalized and normalized)")
-        print(weighted_averageActivity,weighted_averageActivity/self._nsuckers)
+        # print("Time average average active suckers for the policy (un-normalized and normalized):")
+        # print(averageActiveSuckers,averageActiveSuckers/self._nsuckers)
+        # print("Weighted policy measure (un-normalized and normalized)")
+        # print(weighted_averageActivity,weighted_averageActivity/self._nsuckers)
 
-        print("number of visited states out of all possible states:")
-        print(len(visitedStates),self.state_space_dim)
+        # print("number of visited states out of all possible states:")
+        # print(len(visitedStates),self.state_space_dim)
         
         return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates,weighted_actionPerState
-        
-    def getOnPolicyAction(self,state,returnEncoding = False):
-        out_action=[]
-        if self._ganlgia==False:
-            encoded_state = state
-            if self._parallelUpdate:
-                # encoded_state = [stateIndexMap[s] for s in state]
-                for k in range(self._nsuckers):
-                    out_action.append(self._refPolicy[encoded_state[k]])
-            else:
-                # encoded_state_multi = [stateIndexMap_multi[s] for s in state]
-                # encoded_state = [stateIndexMap[s] for s in state]
-                for k in range(self._nAgents):
-                    out_action.append(self._refPolicy[k][encoded_state[k]])
-            
-        else:
-            #GANGLIA (CONTROL CENTER) SCENARIO
-            #here we need a specific binary decoding for the actions and encoding for states
-            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
-            padding= int(self._nsuckers/self._nAgents)
-            if self._parallelUpdate:
-                for k in range(self._nAgents):
-                    out_action.append(make_binary(self._refPolicy[encoded_state[k]],padding))
-            else:
-                for k in range(self._nAgents):
-                    # print(k,self._refPolicy[k])
-                    out_action.append(make_binary(self._refPolicy[k][encoded_state[k]],padding))
-        if returnEncoding:
-            return out_action,encoded_state
-        else:
-            return out_action
         
 
 

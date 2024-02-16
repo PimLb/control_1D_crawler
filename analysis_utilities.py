@@ -103,12 +103,12 @@ def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
 
 def getPolicyStats(Q,env,nLastPolicies = 100,saveResults=True,runtimeInfo=None):
     """
-
+    Useful if some oscillation present on the last segment (pseudo_plateau) of the triaining. Can gather stats on the different policies the Q matrix jumps in.. 
     """
   
     #SAVE RESULTS
     if saveResults:
-        if Q._multiAgent:
+        if Q._ganglia==False:
             if Q._parallelUpdate:
                 type="MULTIAGENT_HIVE"
             else:
@@ -167,7 +167,31 @@ def getPolicyStats(Q,env,nLastPolicies = 100,saveResults=True,runtimeInfo=None):
         footer = "Current time: "+now
         np.savetxt(fileName,np.column_stack((np.array(polIndx),np.round(norm_vels,4),np.round(activeS,3)*100,visitedStates)),fmt=' %d\t%.4f\t\t%.1f\t%d',header=header,footer=footer)
 
-        #%env.omega,np.column_stack((np.array(ns),np.round(vel_RLhive,6))),fmt='%d\t%.6f',header="nsuck\tnormVel\t\t#tentacle length=%d"%env.tentacle_length)
+
+
+
+
+
+################
+# TOOLS FOR ANALYSIS OF TIME AND SPACE (AUTO)CORRELATION OF THE ACTION MATRIX
+
+def timeCorrelation(A,sucker_index):
+    #All averages are time average, therefore along columns (horizontal direction matrix)
+    average = np.average(A[sucker_index])
+    time_steps = A.shape[1]
+    #
+    C = np.empty(time_steps)
+    for t1 in range(time_steps):
+        for t in range(time_steps-t1):
+            C[t1] = A[sucker_index,t+t1] * A[sucker_index,t]
+
+
+
+
+
+
+
+
 
 ##################
 #def actionMapState(policy,is_multiAgent,isHive,n_suckers,nAgents):

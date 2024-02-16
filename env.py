@@ -500,7 +500,7 @@ class   Environment(object):
         self.cumulatedReward = 0 #total reward per episode
 
     def equilibrate(self,steps):
-        if self.isMultiagent:
+        if self.isGanglia==False:
             action = [0]*self._nsuckers
         else:
             action = [[0]*self._nsuckers]
@@ -837,7 +837,7 @@ class   Environment(object):
         NEW: imoplementing syncronous version of overdamped based on evolving previous position from finite velocity (finite friction)
         #IMPORTANT: Consider that any update on .position, enforces automatically boundary conditions
         '''
-
+        # print(action)
             # #BASE
             #     if action[0] == 0:
             #         self._agents[0].position = self._agents[0].rightNeighbor._position - self.l0(self._t,0)

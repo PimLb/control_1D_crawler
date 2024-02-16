@@ -13,6 +13,7 @@ import random
 import math
 import pygame
 import copy 
+import itertools
 
 def interpret_binary(s:tuple):
     return int("".join(str(ele) for ele in s), 2)
