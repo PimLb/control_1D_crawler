@@ -234,6 +234,7 @@ class actionValue(object):
             self.plot_av_value = self._plot_av_value_hive
             if adaptiveScheduling:
                 self._tollerance = min_lr 
+                self._decimalDigits = str(self._tollerance)[::-1].find('.')
                 print("<WARNING>: Adaptive (hive) scheduling tollerance = %.3f"%self._tollerance)
                 self.makeGreedy = self._makeGreedyAdaptive_parallel
             else:
@@ -252,8 +253,10 @@ class actionValue(object):
             self._agentUpdateSet = set([a for a in range(self._nAgents)])
             if adaptiveScheduling:
                 self._tollerance = min_lr 
+                self._decimalDigits = str(self._tollerance)[::-1].find('.')
                 print("<WARNING>: Adaptive scheduling tollerance = %.3f. Convergence checked for each agent (if more than one.)"%self._tollerance)
                 self.makeGreedy = self._makeGreedyAdaptive_multi
+                self.n_episodes = np.zeros(self._nAgents)
             else:
                 self.makeGreedy = self._makeGreedy_multi
 
@@ -467,20 +470,26 @@ class actionValue(object):
         self.updateObs()
 
         self.n_episodes+=1
+        isConv = False
+        isMax = False
         if (self.n_episodes >= self._schedulingSteps):
             self.lr = self.min_lr
-            self.epsilon = min_epsilon
+            self.epsilon = self.min_epsilon
             # diff = abs(self._av_value[-1]-self._av_value[-2])
             av1 = np.average(np.array(self._av_value)[-10:])
             av2 = np.average(np.array(self._av_value)[-20:-10])
-            diff = np.round(np.abs(av1 -av2)/((av1+av2)*0.5),3) #moving window average
-            if diff <= self._tollerance or (self.n_episodes==self.max_episodes):
+            diff = np.round(np.abs((av1 -av2)/((av1+av2)*0.5)),self._decimalDigits) #moving window average
+            isConv = diff <= self._tollerance
+            isMax = self.n_episodes==self.max_episodes
+            if  isConv or isMax:
+                print(isConv,diff)
                 self.set_referencePolicy()
-                return True
+                
         else:
             self.lr -= self._update_lr
             self.epsilon -= self._update_epsilon
-            return False
+        
+        return (isConv,isMax)
     
     def _makeGreedy_parallel(self):
         #UPDATE OBSERVABLES (costly)
@@ -531,29 +540,40 @@ class actionValue(object):
         '''
 
         self.updateObs()
-
-        self.n_episodes+=1
+        isConv = False
+        isMax = False
+        
         if (self.n_episodes >= self._schedulingSteps):
-            self.lr = min_lr
-            self.epsilon = self.min_epsilon
+            self.lr = self.min_lr
+            self.epsilon[:] = self.min_epsilon
             # diff = abs(self._av_value[-1]-self._av_value[-2])
             # diff = np.round(np.abs(np.array(self._av_value)[-1,:] - np.array(self._av_value)[-2,:]),3)
             av1 = np.average(np.array(self._av_value)[-10:,:],axis=0)
             av2 = np.average(np.array(self._av_value)[-20:-10,:],axis=0)
-            diff = np.round(np.abs(av1 -av2)/((av1+av2)*0.5),3) #moving window average
+            diff = np.round(np.abs((av1 -av2)/((av1+av2)*0.5)),self._decimalDigits) #moving window average
             conv_array= diff<=self._tollerance
+            isMax = self.n_episodes==self.max_episodes
+            isConv = conv_array.all()
             if conv_array.any():
+                print(diff)
+                toBeRemoved = set()
                 for a in self._agentUpdateSet:
                     if conv_array[a]:
-                        self._agentUpdateSet.remove(a)
-                        self.epsilon[a]=0
-            if conv_array.all() or (self.n_episodes==self.max_episodes):
+                        toBeRemoved.add(a)
+                        self.epsilon[a] = 0
+                    self.n_episodes[a] +=1 #increase episodes of active agent
+                self._agentUpdateSet = self._agentUpdateSet - toBeRemoved
+            else:
+                self.n_episodes+=1
+            if isConv or isMax:
                 self.set_referencePolicy()
-                return True
+                
+
         else:
             self.lr -= self._update_lr
             self.epsilon -= self._update_epsilon
-            return False
+        
+        return (isConv,isMax)
 
         
     # def _get_onPolicy_action_multiagent(self,state):
@@ -681,7 +701,11 @@ class actionValue(object):
         
 
     def set_referencePolicy(self,n_previous=1):
+        '''
+        Sets policy to be followed (when on-policy) and returns correspondent average values (one per agent)
+        '''
         self._refPolicy = self._lastPolicies[-n_previous]
+        return self._av_value[-n_previous]
         # print("current on policy = last -%d policy"%n_previous)
 
         
@@ -800,8 +824,10 @@ class actionValue(object):
         plt.figure()
         self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
         self._fig_av_value.set_title(label='Average value sucker '+str(n))
-        episodes = [e for e in range(self.n_episodes+1)]
+        # episodes = [e for e in range(self.n_episodes+1)]
         avValue = np.array(self._av_value)[:,n]
+        episodes = [e for e in range(avValue.size)]
+
         self._fig_av_value.plot(episodes,avValue,c='black')
         if labelPolicyChange:
             prop_cycle = plt.rcParams['axes.prop_cycle']
@@ -822,8 +848,9 @@ class actionValue(object):
             plt.figure()
             self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
             self._fig_av_value.set_title(label='Average value learning for ganglion '+str(n))
-            episodes = [e for e in range(self.n_episodes+1)]
+            # episodes = [e for e in range(self.n_episodes+1)]
             avValue = np.array(self._av_value)[:,n]
+            episodes = [e for e in range(avValue.size)]
             self._fig_av_value.plot(episodes,avValue,c='black')
             if labelPolicyChange:
                 prop_cycle = plt.rcParams['axes.prop_cycle']
@@ -873,6 +900,9 @@ class actionValue(object):
         episodes = [e for e in range(self.n_episodes)]
         convergence = np.array(self._convergence)[:,n]
         self._fig_convergence.plot(episodes,convergence)
+
+
+    ####################
     
     def getOnpolicyActionMatrix(self,env,timeFrame = 2000):
         '''
@@ -895,7 +925,7 @@ class actionValue(object):
 
         return actionMatrix
 
-    def evaluatePolicy(self,env,timeWindowActionMatrix=1000):
+    def evaluatePolicy(self,env):
         """ 
             Implement some heuristic measures of the policy.
             Can consider last n policies by the argument "which" (default is the last one).
@@ -982,7 +1012,7 @@ class actionValue(object):
         # print("number of visited states out of all possible states:")
         # print(len(visitedStates),self.state_space_dim)
         
-        return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates,weighted_actionPerState
+        return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates#,weighted_actionPerState
         
 
 

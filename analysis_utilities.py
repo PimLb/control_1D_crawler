@@ -101,31 +101,31 @@ def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
 
 
 
-def getPolicyStats(Q,env,nLastPolicies = 100,saveResults=True,runtimeInfo=None):
+def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None):
     """
     Useful if some oscillation present on the last segment (pseudo_plateau) of the triaining. Can gather stats on the different policies the Q matrix jumps in.. 
     """
-  
-    #SAVE RESULTS
-    if saveResults:
-        if Q._ganglia==False:
-            if Q._parallelUpdate:
-                type="MULTIAGENT_HIVE"
-            else:
-                type="MULTIAGENT"
+    
+    # I  expect runtimeInfo contains also info on number of steps and episodes with eventual number of convergence cycles
+
+    if Q._ganglia==False:
+        if Q._parallelUpdate:
+            type="MULTIAGENT_HIVE"
         else:
-            nAgents = Q._nAgents
-            if Q._parallelUpdate:
-                type = "%dGANGLIA_HIVE"%nAgents
-            else:
-                type = "%dGANGLIA"%nAgents
-                
-        print("out file name:")
-        fileName = "policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
+            type="MULTIAGENT"
+    else:
+        nAgents = Q._nAgents
+        if Q._parallelUpdate:
+            type = "%dGANGLIA_HIVE"%nAgents
+        else:
+            type = "%dGANGLIA"%nAgents
+            
+    print("out file name:")
+    fileName = "Raw_policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
         
 
-        print(fileName)
-        input()
+    print(fileName)
+    input()
 
     #first establish baseline of the random policy (or the null one)
     # print("Random Policy ANalysis")
@@ -140,34 +140,59 @@ def getPolicyStats(Q,env,nLastPolicies = 100,saveResults=True,runtimeInfo=None):
     #policy characterization measures
     relative_state_freqs =[]
     activeS =[] #normalized by total number of suckers in the tentacle
+    value =[] #value associated to the policy
     c=0
     print("Gathering properties of last %d policies.."%nLastPolicies)
     for pol_n in trange(1,nLastPolicies+1):
         polIndx.append(c)
-        Q.set_referencePolicy(pol_n)
+        value.append(Q.set_referencePolicy(pol_n))
         # print("")
-        vel,state_freq,norm_activeSuckers,visited,_wAS = Q.evaluatePolicy(env)
+        vel,state_freq,norm_activeSuckers,visited = Q.evaluatePolicy(env)
         norm_vels.append(vel)
         visitedStates.append(len(visited))
         relative_state_freqs.append({s:(state_freq[s]-state_freqRandom[s])/state_freqRandom[s]*100 for s in visitedRandom})
         activeS.append(norm_activeSuckers)
         c+=1
+    norm_vels = np.array(norm_vels)
+    max_vel= np.amax(norm_vels)
+    bestPolIndx = np.argmax(norm_vels) #Returns first occurrence
+    average_normVel = np.average(norm_vels)
+    std_normVel = np.std(norm_vels)
     
-    if not saveResults:
-        return norm_vels,relative_state_freqs,activeS
-    else:
-        norm_vels = np.array(norm_vels)
-        activeS = np.array(activeS)
-        visitedStates = np.array(visitedStates)
-        #INFO:x0=%.3f, tLengthavailable states/all possible:%d/%d\n %(visitedStates,Q.state_space_dim
-        header = "x0=%.3f. Visited states under random_policy:%d/%d\nindx\tnorm vel\tactiveSts[%%]\tvisitedStates"%(env.x0,len(visitedRandom),Q.state_space_dim)
-        now = datetime.now().ctime()
-        if runtimeInfo is not None:
-            footer = "runtime for training: "+runtimeInfo+"\nCurrent time: "+now
-        footer = "Current time: "+now
-        np.savetxt(fileName,np.column_stack((np.array(polIndx),np.round(norm_vels,4),np.round(activeS,3)*100,visitedStates)),fmt=' %d\t%.4f\t\t%.1f\t%d',header=header,footer=footer)
+    outFileName = "SUMMARY_policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
+    outFile = open(outFileName,'w')
+
+    line = '***** SUMMARY ****\nn suckers = %d, T length = %d, omega = %.2f, x0= %.3f Type: %s'%(Q._nsuckers,env.tentacle_length,env.omega,env.x0,type)
+    outFile.write(line)
+    line='\nNumber of policies analyzed : %d'%nLastPolicies
+    outFile.write(line)
+    line='\n\nNORMALIZED VEL AVERAGE= %.4f +- %.4f'%(np.round(average_normVel,4),np.round(std_normVel,4))
+    outFile.write(line)
+    line='\nNORMALIZED VEL MAX= %.4f\t Correspondent policy index: %d'%(np.round(max_vel,4),bestPolIndx)
+    outFile.write(line)
+    if runtimeInfo is not None:
+        line = "\n\nRUNTIME: "+runtimeInfo
+        outFile.write(line)
 
 
+    activeS = np.array(activeS)
+    visitedStates = np.array(visitedStates)
+    value = np.array(value)
+    # print(value)
+    if value.ndim>1:
+        value = np.sum(value,axis=1) #total value for all agents
+    #INFO:x0=%.3f, tLengthavailable states/all possible:%d/%d\n %(visitedStates,Q.state_space_dim
+    header = "x0=%.3f. Visited states under random_policy:%d/%d\nindx\tnorm vel\tactiveSts[%%]\tvisitedStates\tTotal av_value"%(env.x0,len(visitedRandom),Q.state_space_dim)
+    now = datetime.now().ctime()
+    if runtimeInfo is not None:
+        footer = "runtime for training: "+runtimeInfo+"\nCurrent time: "+now
+    footer = "Current time: "+now
+    np.savetxt(fileName,np.column_stack((np.array(polIndx),np.round(norm_vels,6),np.round(activeS,3)*100,visitedStates,np.round(value,3))),fmt=' %d\t%.6f\t\t%.1f\t%d\t\t%.3f',header=header,footer=footer)
+
+    Q._refPolicy = Q.getPolicy()
+
+
+    return bestPolIndx
 
 
 
@@ -178,17 +203,43 @@ def getPolicyStats(Q,env,nLastPolicies = 100,saveResults=True,runtimeInfo=None):
 def timeCorrelation(A,sucker_index):
     #All averages are time average, therefore along columns (horizontal direction matrix)
     average = np.average(A[sucker_index])
+    print(average)
     time_steps = A.shape[1]
+    print(time_steps)
     #
     C = np.empty(time_steps)
     for t1 in range(time_steps):
         for t in range(time_steps-t1):
-            C[t1] = A[sucker_index,t+t1] * A[sucker_index,t]
+            C[t1] += A[sucker_index,t+t1] * A[sucker_index,t]
+    C = C/time_steps/(average*average)
+    return C 
+
+def twoSuckerCorrelation(A,sucker_index):
+    n_suckers = A.shape[0]
+    time_steps = A.shape[0]
+    C = np.empty(n_suckers)
+    average = np.average(A[sucker_index]) #average over all suckers.. Is that correct?
+    # print(average)
+    # suckers = set(np.arange(n_suckers))
+    # suckers.remove(sucker_index) #all other suckers
+    # print(suckers)
+    for i1 in range(n_suckers):
+        C[i1] = np.average(A[i1,:] * A[sucker_index,:])
+    # print(C)
+    C = C/(average*average)
+    # print(C)
+    return C
 
 
 
+# def extractResults(infile):
+#     '''
+#     Read recap file, returns index with best policy, average and standard deviation. 
+#     This routine could be coupled with the extraction of the relevant Action Matrix (time serie of the action performed by a policy), and relevant analysis of it.
+#     '''
 
-
+#     out_file = open('SUMMARY_'+ infile +'.out','w')
+    
 
 
 
