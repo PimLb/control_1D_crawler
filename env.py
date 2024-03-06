@@ -47,7 +47,7 @@ x0Fraction = 4
 
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
-dt = 0.2
+dt = 0.1
 
 #NEW: ASSUME k and zeta same order both in overdamped and damped
 

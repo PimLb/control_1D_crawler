@@ -101,7 +101,7 @@ def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
 
 
 
-def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None):
+def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",info=None):
     """
     Useful if some oscillation present on the last segment (pseudo_plateau) of the triaining. Can gather stats on the different policies the Q matrix jumps in.. 
     """
@@ -120,12 +120,12 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None):
         else:
             type = "%dGANGLIA"%nAgents
             
-    print("out file name:")
-    fileName = "Raw_policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
-        
+    # print("out file name:")
+    fileName = outFolder+"Raw_policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
+    
 
-    print(fileName)
-    input()
+    # print(fileName)
+    # input()
 
     #first establish baseline of the random policy (or the null one)
     # print("Random Policy ANalysis")
@@ -143,7 +143,8 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None):
     value =[] #value associated to the policy
     c=0
     print("Gathering properties of last %d policies.."%nLastPolicies)
-    for pol_n in trange(1,nLastPolicies+1):
+    # for pol_n in trange(1,nLastPolicies+1):
+    for pol_n in range(1,nLastPolicies+1):
         polIndx.append(c)
         value.append(Q.set_referencePolicy(pol_n))
         # print("")
@@ -155,9 +156,14 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None):
         c+=1
     norm_vels = np.array(norm_vels)
     max_vel= np.amax(norm_vels)
-    bestPolIndx = np.argmax(norm_vels) #Returns first occurrence
+    bestPolIndx = np.argmax(norm_vels) +1 #Returns first occurrence
     average_normVel = np.average(norm_vels)
     std_normVel = np.std(norm_vels)
+
+    #best 100 policies
+    sorted_norm_vels = np.sort(norm_vels)[::-1]
+    avergeSorted = np.average(sorted_norm_vels[0:int(nLastPolicies/2)])
+    stdSorted = np.std(sorted_norm_vels[0:int(nLastPolicies/2)])
     
     outFileName = "SUMMARY_policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
     outFile = open(outFileName,'w')
@@ -166,7 +172,12 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None):
     outFile.write(line)
     line='\nNumber of policies analyzed : %d'%nLastPolicies
     outFile.write(line)
+    if info is not None:
+        line = '\nPlateau exploration parameters: lr = %.4f\tepsilon =%.3f\tsteps = %d'%(info['lr'],info['eps'],info['steps'])
+        outFile.write(line)
     line='\n\nNORMALIZED VEL AVERAGE= %.4f +- %.4f'%(np.round(average_normVel,4),np.round(std_normVel,4))
+    outFile.write(line)
+    line='\nNORMALIZED VEL BEST%d POLICIES= %.4f +- %.4f'%(int(nLastPolicies/2),np.round(avergeSorted,4),np.round(stdSorted,4))
     outFile.write(line)
     line='\nNORMALIZED VEL MAX= %.4f\t Correspondent policy index: %d'%(np.round(max_vel,4),bestPolIndx)
     outFile.write(line)
