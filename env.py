@@ -567,8 +567,8 @@ class   Environment(object):
         states.append(self.state_space_name[('base',right_tension)])
 
         #update old posiiton
-        self._suckers[0]._position_old = self._suckers[0].position.copy()
-        self._suckers[0]._abslutePosition_old = self._suckers[0]._abslutePosition.copy()
+        # self._suckers[0]._position_old = self._suckers[0].position.copy()
+        # self._suckers[0]._abslutePosition_old = self._suckers[0]._abslutePosition.copy()
         #Intermediate suckers
         # for k in range(1,self._nsuckers-1):
         for sucker in self._suckers[1:self._nsuckers-1]:
@@ -586,9 +586,9 @@ class   Environment(object):
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
             states.append(self.state_space_name[(left_tension,right_tension)])
 
-            #update old posiitons
-            sucker._position_old = sucker.position.copy()
-            sucker._abslutePosition_old = sucker._abslutePosition.copy()
+            # #update old posiitons
+            # sucker._position_old = sucker.position.copy()
+            # sucker._abslutePosition_old = sucker._abslutePosition.copy()
 
         #TIP
         dleft = self._suckers[self._nsuckers-1]._abslutePosition - self._suckers[self._nsuckers-1].leftNeighbor._abslutePosition
@@ -598,8 +598,8 @@ class   Environment(object):
         states.append(self.state_space_name[(left_tension,'tip')])
 
         #update old posiiton
-        self._suckers[self._nsuckers-1]._position_old=self._suckers[self._nsuckers-1].position.copy()
-        self._suckers[self._nsuckers-1]._abslutePosition_old = self._suckers[self._nsuckers-1]._abslutePosition.copy()
+        # self._suckers[self._nsuckers-1]._position_old=self._suckers[self._nsuckers-1].position.copy()
+        # self._suckers[self._nsuckers-1]._abslutePosition_old = self._suckers[self._nsuckers-1]._abslutePosition.copy()
 
 
         # if multiagent:
@@ -800,12 +800,16 @@ class   Environment(object):
 
 
         reward,terminal = self._getReward()
-        newState = self.get_state()#also updates old positions <--
+        newState = self.get_state()
         
         self._telapsed.append(self._t)
         self._t += self.deltaT
         self._nsteps +=1
 
+        for sucker in self._suckers:
+            sucker._position_old = sucker.position.copy()
+            sucker._abslutePosition_old = sucker._abslutePosition.copy()
+        
 
         return  newState,reward,terminal 
 
@@ -821,9 +825,9 @@ class   Environment(object):
         return_value = self._stepOverdamped(action_flattened)
 
         #update old positions
-        for sucker in self._suckers:
-            sucker._position_old = sucker.position.copy()
-            sucker._abslutePosition_old = sucker._abslutePosition.copy()
+        # for sucker in self._suckers:
+        #     sucker._position_old = sucker.position.copy()
+        #     sucker._abslutePosition_old = sucker._abslutePosition.copy()
         
      
         return return_value
@@ -941,12 +945,17 @@ class   Environment(object):
 
 
         reward,terminal = self._getReward()
-        newState = self.get_state()#also updates old positions <--
+        newState = self.get_state()
         
 
         self._telapsed.append(self._t)
         self._t += self.deltaT
         self._nsteps +=1
+
+        #update old positions
+        for sucker in self._suckers:
+            sucker._position_old = sucker.position.copy()
+            sucker._abslutePosition_old = sucker._abslutePosition.copy()
 
         return  newState,reward,terminal 
 
