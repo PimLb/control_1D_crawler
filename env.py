@@ -3,7 +3,8 @@ from globals import *
 # import pygame
 # import numpy as np
 
-
+state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
+action_space_name = {1:'anchoring', 0:'not anchoring'}
 np.seterr(invalid='ignore')
 # import math
 # import random
@@ -378,9 +379,9 @@ class   Environment(object):
             print("**SUCKER AGENT**")
             # self.action_space = 2 # sucker can turn on friction or turn it off
             # self.state_space = 8#4
-            self.action_space_name = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
+            # self.action_space_name = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
             self.action_space= 2
-            self.state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
+            # self.state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
             self.state_space = 8
         else:
             print("** CONTROL CENTER **")
@@ -395,8 +396,8 @@ class   Environment(object):
             self.get_state = self._get_state_controlCluster
             self.action_space = np.power(2,controlClusterSize)
             self.state_space = np.power(2,n_springs) # eg. ns =5 and 1 ganglion --> 4  springs --> 4 digit binary number to represent state
-            self.action_space_name = {1:'anchoring', 0:'not anchoring'}
-            self.state_space_name = {1:'elongated', 0:'compressed'}
+            # self.action_space_name = {1:'anchoring', 0:'not anchoring'}
+            # self.state_space_name = {1:'elongated', 0:'compressed'}
             # self._nagents = int((n_suckers - 1)/controlClusterSize)
             self._nGanglia = nGanglia
             
@@ -564,7 +565,7 @@ class   Environment(object):
         #     dright +=  self._box.boundary
             # print(dright)
         right_tension = sign0(dright-self.l0(self._t,0))
-        states.append(self.state_space_name[('base',right_tension)])
+        states.append(state_space_name[('base',right_tension)])
 
         #update old posiiton
         # self._suckers[0]._position_old = self._suckers[0].position.copy()
@@ -584,7 +585,7 @@ class   Environment(object):
             # if dleft<0:
             #     dleft += self._box.boundary
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
-            states.append(self.state_space_name[(left_tension,right_tension)])
+            states.append(state_space_name[(left_tension,right_tension)])
 
             # #update old posiitons
             # sucker._position_old = sucker.position.copy()
@@ -595,7 +596,7 @@ class   Environment(object):
         # if dleft<0:
         #     dleft += self._box.boundary
         left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-2))
-        states.append(self.state_space_name[(left_tension,'tip')])
+        states.append(state_space_name[(left_tension,'tip')])
 
         #update old posiiton
         # self._suckers[self._nsuckers-1]._position_old=self._suckers[self._nsuckers-1].position.copy()
