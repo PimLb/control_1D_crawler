@@ -1,10 +1,10 @@
 #Contains accessory funcitons used for testing, comparing, plotting ecc
 # More of a workbook note
 
-import numpy as np
+# import numpy as np
 import globals
 from tqdm import trange
-
+import numpy as np
 from datetime import datetime
 
 
@@ -48,14 +48,125 @@ def anal_vel_l0norm(N,omega,x0Fraction):
 
 ###################
 ########################        POLICY ANALYSIS TOOLS   
+def onPolicyStateActionVisit(env,policy,isHive):
+    '''
+    Returns for each sucker the frequency each multiagent state is played.
+    In mind I have that I can do 4 color plots over the tentacle for the 4 different internal states (while always same for base and tip)
+    We can use as bottom line the hive policy
+    Return also average active suckers of analyzed policy
+    '''
+    # internalStates = {'->|<-','<-|->','<-|<-','->|->'}
+    # multiState = env._get_state_multiagent()
+    
+    #   PLAY THE POLICY
+    #looop the following over integration steps 
+    
+    # suckerActFreq= {'->|<-': 0 ,'->|->':0,'->|tip':0,'<-|<-':0,'<-|->':0,'<-|tip':0,'base|<-':0,'base|->':0}
+
+    steps = 20000
+    actionFreqPerSucker = []
+    stateFreqPerSucker = []
+    n_activeSuckers = 0
+    nsuckers = env._nsuckers
+    info = env.info
+    isGanglia = info["isGanglia"]
+    
+    if isGanglia:
+        nGanglia = info["n ganglia"]
+        nAgents = nGanglia
+        if nAgents ==1:
+         #the way in which policies are saved consider the format of 1 ganglion as a single element array of policies
+            isHive = False
+        if isHive:
+            a,gind  = ([0]*nGanglia,range(nGanglia))
+        else:
+            a,gind  = (range(nGanglia),range(nGanglia))
+    else:
+        #MULTIAGENT
+        if isHive:
+            nAgents = 1
+            a,sid  = ([0]*env._nsuckers,range(env._nsuckers))
+        else:
+            nAgents = nsuckers
+            a,sid  = (range(nAgents),range(env._nsuckers))
+    if isHive:
+        policy = np.array([policy.item()])#just for the way they were saved, and to allow zip loop
+        
+
+    for n in range(env._nsuckers):
+        actionFreqPerSucker.append({'->|<-': 0 ,'->|->':0,'->|tip':0,'<-|<-':0,'<-|->':0,'<-|tip':0,'base|<-':0,'base|->':0})
+        stateFreqPerSucker.append({'->|<-': 0 ,'->|->':0,'->|tip':0,'<-|<-':0,'<-|->':0,'<-|tip':0,'base|<-':0,'base|->':0})
+    #PLAY THE ACTION
+    env.equilibrate(1000)
+    state = env.get_state()
+    # print(state)
+    # ----------------- GANGLIA SCENARIO ---------
+    if env.isGanglia:
+        padding= int(nsuckers/nAgents)
+        print("Ganglia")
+        for t in trange(steps): 
+            encoded_state = [globals.interpret_binary(s) for s in state]
+            action = []
+            # if isHive:
+                # for k in range(env._nsuckers):
+                #     #get on-policy action
+                #     action.append(policy[encoded_state[k]])
+            # else:
+            for a,gind in zip(a,gind):#agent,ganglion index
+                action.append(globals.make_binary(policy[a][encoded_state[gind]],padding))
+            state,r,_t=env.step(action)
+            n_activeSuckers += sum(action)
+            multiState = env._get_state_multiagent() #getting states in term of sucker rather than spring
+        #UPDATE FREQ
+            for indx,s in enumerate(multiState):
+                stateFreqPerSucker[indx][s] +=1
+                actionFreqPerSucker[indx][s] += action[indx]
+
+        # ----------- MULTIAGENT SCENARIO ------------
+                
+    else:
+        print("Multiagent")
+        for t in trange(steps): 
+            action = []
+            for a,sk in zip(a,sid): #agent,sucker index
+                #get on policy action
+                action.append(policy[a][state[sk]])
+            state,r,_t=env.step(action)
+            n_activeSuckers += sum(action)
+            for indx,s in enumerate(state):
+                stateFreqPerSucker[indx][s] +=1
+                actionFreqPerSucker[indx][s] += action[indx]
+
+
+    averageActiveSuckers = n_activeSuckers/(t+1)
+    #FINALIZE STATS
+    #normalization
+    stateFreqPerSucker.update((key, val/(t+1)) for key, val in stateFreqPerSucker.items())  
+    actionFreqPerSucker.update((key, val/(t+1)) for key, val in actionFreqPerSucker.items())  
+
+    #furtherNormalization? Maybe externally..      
+    
+    
+    #SAVE and also return
+
+    return stateFreqPerSucker,actionFreqPerSucker
+    
+
+    #PLOT --> other function
+    #colorplot y-axis 4 states x-axis sucker position 
+    # I think it would be nice to normalize with respect to the standard multiagent HIVE policy (the only one I have explicit knowledge of by the way)
+
 
 
 def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
     '''
+    Returns a number reoresenting frequency ogf anchoring action per state.
     NOT sure of the interpretation, but it could be a compact number to assign to a policy?
-    In principle this is knowable a priori.. A given policy corresponds to a fixed amount of actions for each given state..
+    In principle this is knowable a priori.. A given policy corresponds to a fixed amount of anchoring actions for each given state..
     Since I see this as a per tentacle property, I return the overall active suckers per state for the given policy. 
     De facto I'm mapping not hive into hive doing so in terms of action population..
+
+    CAREFUL: In practice many staes are never visited. Needs to be weighted by an on-policy state visits frequency
     '''
     internalStates = {'->|<-','<-|->','<-|<-','->|->'}
     actionPerState = {}
@@ -151,7 +262,7 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
         vel,state_freq,norm_activeSuckers,visited = Q.evaluatePolicy(env)
         norm_vels.append(vel)
         visitedStates.append(len(visited))
-        relative_state_freqs.append({s:(state_freq[s]-state_freqRandom[s])/state_freqRandom[s]*100 for s in visitedRandom})
+        relative_state_freqs.append({s:(state_freq[s]-state_freqRandom[s])/state_freqRandom[s]*100 for s in visitedRandom}) #WARNING: unused
         activeS.append(norm_activeSuckers)
         c+=1
     norm_vels = np.array(norm_vels)
@@ -165,15 +276,15 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     avergeSorted = np.average(sorted_norm_vels[0:int(nLastPolicies/2)])
     stdSorted = np.std(sorted_norm_vels[0:int(nLastPolicies/2)])
     
-    outFileName = "SUMMARY_policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
+    outFileName = "SUMMARY_policyMeasuresFor%dsuckers_omega%.2f_%s.txt"%(Q._nsuckers,env.omega,type)
     outFile = open(outFileName,'w')
 
     line = '***** SUMMARY ****\nn suckers = %d, T length = %d, omega = %.2f, x0= %.3f Type: %s'%(Q._nsuckers,env.tentacle_length,env.omega,env.x0,type)
     outFile.write(line)
-    line='\nNumber of policies analyzed : %d'%nLastPolicies
+    line='\nNumber of policies analyzed : %d.'%(nLastPolicies)
     outFile.write(line)
     if info is not None:
-        line = '\nPlateau exploration parameters: lr = %.4f\tepsilon =%.3f\tsteps = %d'%(info['lr'],info['eps'],info['steps'])
+        line = '\nConvergence criterion (tollerance) = %.3f\nPlateau exploration parameters: lr = %.4f\tepsilon =%.3f\tsteps = %d'%(info['convergence'],info['lr'],info['eps'],info['steps'])
         outFile.write(line)
     line='\n\nNORMALIZED VEL AVERAGE= %.4f +- %.4f'%(np.round(average_normVel,4),np.round(std_normVel,4))
     outFile.write(line)
