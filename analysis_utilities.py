@@ -78,17 +78,17 @@ def onPolicyStateActionVisit(env,policy,isHive):
          #the way in which policies are saved consider the format of 1 ganglion as a single element array of policies
             isHive = False
         if isHive:
-            a,gind  = ([0]*nGanglia,range(nGanglia))
+            ag,gindxs  = ([0]*nGanglia,range(nGanglia))
         else:
-            a,gind  = (range(nGanglia),range(nGanglia))
+            ag,gindxs  = (range(nGanglia),range(nGanglia))
     else:
         #MULTIAGENT
         if isHive:
             nAgents = 1
-            a,sid  = ([0]*env._nsuckers,range(env._nsuckers))
+            ag,sindxs  = ([0]*env._nsuckers,range(env._nsuckers))
         else:
             nAgents = nsuckers
-            a,sid  = (range(nAgents),range(env._nsuckers))
+            ag,sindxs  = (range(nAgents),range(env._nsuckers))
     if isHive:
         policy = np.array([policy.item()])#just for the way they were saved, and to allow zip loop
         
@@ -104,6 +104,8 @@ def onPolicyStateActionVisit(env,policy,isHive):
     if env.isGanglia:
         padding= int(nsuckers/nAgents)
         print("Ganglia")
+        print("n Gagnlia = ",nGanglia)
+        print("IS HIVE =",isHive)
         for t in trange(steps): 
             encoded_state = [globals.interpret_binary(s) for s in state]
             action = []
@@ -112,50 +114,136 @@ def onPolicyStateActionVisit(env,policy,isHive):
                 #     #get on-policy action
                 #     action.append(policy[encoded_state[k]])
             # else:
-            for a,gind in zip(a,gind):#agent,ganglion index
+            for a,gind in zip(ag,gindxs):#agent,ganglion index
                 action.append(globals.make_binary(policy[a][encoded_state[gind]],padding))
-            state,r,_t=env.step(action)
-            n_activeSuckers += sum(action)
+            action_flattened = [a for al in action for a in al]
+            n_activeSuckers += sum(action_flattened)
             multiState = env._get_state_multiagent() #getting states in term of sucker rather than spring
         #UPDATE FREQ
             for indx,s in enumerate(multiState):
                 stateFreqPerSucker[indx][s] +=1
-                actionFreqPerSucker[indx][s] += action[indx]
-
+                actionFreqPerSucker[indx][s] += action_flattened[indx]
+            state,r,_t=env.step(action)
         # ----------- MULTIAGENT SCENARIO ------------
                 
     else:
         print("Multiagent")
+        print("IS HIVE =",isHive)
         for t in trange(steps): 
             action = []
-            for a,sk in zip(a,sid): #agent,sucker index
+            for a,sid in zip(ag,sindxs): #agent,sucker index
                 #get on policy action
-                action.append(policy[a][state[sk]])
-            state,r,_t=env.step(action)
+                action.append(policy[a][state[sid]])
             n_activeSuckers += sum(action)
             for indx,s in enumerate(state):
                 stateFreqPerSucker[indx][s] +=1
                 actionFreqPerSucker[indx][s] += action[indx]
+            state,r,_t=env.step(action)
 
-
-    averageActiveSuckers = n_activeSuckers/(t+1)
+    averageActiveSuckers = n_activeSuckers/(t+1)/nsuckers
     #FINALIZE STATS
     #normalization
-    stateFreqPerSucker.update((key, val/(t+1)) for key, val in stateFreqPerSucker.items())  
-    actionFreqPerSucker.update((key, val/(t+1)) for key, val in actionFreqPerSucker.items())  
-
-    #furtherNormalization? Maybe externally..      
-    
-    
+    print("Analysis over\nAVERAGE ACTIVE SUCKERS:", averageActiveSuckers)
+    print("Velocity analyzed policy:",env.get_averageVel()/env.x0)
+    # print(stateFreqPerSucker)
+    # print(actionFreqPerSucker)
+    for sF,aF in zip(stateFreqPerSucker,actionFreqPerSucker):
+        sF.update((key, val/(t+1)) for key, val in sF.items())  
+        aF.update((key, val/(t+1)) for key, val in aF.items())  
+    normActFreq = []
+    for sF,aF in zip(stateFreqPerSucker,actionFreqPerSucker):
+        normActFreq.append({k: (aF[k]/sF[k] if aF[k]!=0 else 0) for k in aF.keys() })
     #SAVE and also return
 
-    return stateFreqPerSucker,actionFreqPerSucker
+    return stateFreqPerSucker,actionFreqPerSucker,normActFreq
     
 
-    #PLOT --> other function
+def plotTSvisits(actionFreq,refActionfreq=None):
+    import matplotlib.pyplot as plt
+    """
+    If ref is given, the color plot is normalized by the reference (standard choice would be to use the standard hive policy..)
+    """
+    intermediateKeys = set(['->|<-','->|->','<-|<-','<-|->'])
+    baseKeys = ['base|<-','base|->']
+    tipKeys = ['->|tip','<-|tip']
     #colorplot y-axis 4 states x-axis sucker position 
-    # I think it would be nice to normalize with respect to the standard multiagent HIVE policy (the only one I have explicit knowledge of by the way)
-
+    
+    #Read plot tile from key and value from item. 
+    #First I have to gather per key all suckers
+    #Keep it general for easier adaptation (be agnostic about key names..)
+    nsuckers = len(actionFreq)
+    keys = set(actionFreq[0].keys())
+    tentacleState = {}
+    if refActionfreq is not None:
+        print("NORMALIZING WITH REFERENCE..")
+        for k in keys:
+            freqPerSucker = []
+            print(k)
+            for ns in range(nsuckers):
+                # print(actionFreq[ns][k],refActionfreq[ns][k])
+                # if refActionfreq[ns][k] !=0:
+                if actionFreq[ns][k]==0:
+                    freqPerSucker.append(0)
+                else:
+                    try:
+                        freqPerSucker.append(actionFreq[ns][k]/refActionfreq[ns][k])
+                    except ZeroDivisionError:
+                        freqPerSucker.append(np.inf)
+                    #     print(actionFreq[ns][k],refActionfreq[ns][k])
+                    #     exit()
+                # else:
+                    # freqPerSucker.append(actionFreq[ns][k])
+            print(freqPerSucker)
+            tentacleState[k] = np.array(freqPerSucker)
+    else:
+        for k in keys:
+            freqPerSucker = []
+            print(k)
+            for ns in range(nsuckers):
+                freqPerSucker.append(actionFreq[ns][k])
+            print(freqPerSucker)
+            tentacleState[k] = np.array(freqPerSucker)
+    # print(tentacleState)
+    
+    #prepare what I plot--> combine base|<- with <-|<-  with <-|tip ecc..
+    # stateKeys = set(['->|<-','<-|->','base|<- <-|<- <-|tip', 'base|-> ->|-> ->|tip'])
+    # stateKeys = {'->|<-':0,'<-|->':1,'<-|<-':2, '->|->':3}
+    
+    tentacleState['<-|<-'] = tentacleState['base|<-'] + tentacleState['<-|<-'] + tentacleState['<-|tip']
+    tentacleState['->|->'] = tentacleState['base|->'] + tentacleState['->|->'] + tentacleState['->|tip']
+    for k in baseKeys + tipKeys:
+        del tentacleState[k]
+        keys.remove(k)
+    print(tentacleState)
+    # print(np.array([tentacleState[k] for k in tentacleState]))
+    
+    plt.figure()
+    fig = plt.subplot(xlabel='sucker', ylabel='')
+    fig.set_yticks([0,1,2,3],list(keys))
+    fig.set_xticks(list(np.arange(0,nsuckers)),['base']+list(np.arange(2,nsuckers))+['tip'])
+    # fig.set_xlim([-1,nsuckers+1])
+    # fig.set_ylim([-1,4])
+    plt.ion()
+    plt.show()
+    # X,Y = np.meshgrid(np.arange(0,nsuckers),stateKeys.items())
+    Z = np.array([tentacleState[k] for k in tentacleState])
+    print(Z)
+    # if refActionfreq is not None:
+    #     Znorm = np.round(Z,2)
+    # else:
+    Zmax = np.nanmax(Z[np.abs(Z) != np.inf])
+    Znorm = np.round(Z/Zmax,2)
+    print(Zmax)
+    # print(Z[2])
+    # fig.pcolor(X, Y, Z)
+    fig.imshow(Z)
+    for i in range(len(keys)):
+        for j in range(nsuckers):
+            text = fig.text(j, i, Znorm[i, j],
+                       ha="center", va="center", color="w")
+        
+        
+        
 
 
 def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
