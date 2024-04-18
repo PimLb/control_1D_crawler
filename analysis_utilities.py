@@ -48,6 +48,132 @@ def anal_vel_l0norm(N,omega,x0Fraction):
 
 ###################
 ########################        POLICY ANALYSIS TOOLS   
+
+
+def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
+    '''
+    Returns a plot/data on decay of velocity as a function of the #suckers failing when playing the given policy.
+    Usage: loop externally to extract correspondent velocity. 
+    '''
+    #Planning to use it on 12s. Might be interesting to consider 20s-->save best policies!!
+
+    #TODO
+    #Select n suckers failing with prob 1 EXCLUDING BASE AND TIP (too influencial I think)
+    #Randomly shuffle which sucker is failing
+    #Failing = do the opposite of the prescription
+    #Second modality of failure: epsilonGreedy fashon: 
+    #   PROBLEM: more exxtractions for multi vs ganglia--> difficult to compare fairly
+
+    #Consider creating a dedicate plot function which also loops this funciton for different # sucker failures
+    # and also makes a small video
+    import random
+    failingSuckers = 1
+    epsilon = 0.1
+
+
+
+    steps = 20000
+
+    nsuckers = env._nsuckers
+    info = env.info
+    isGanglia = info["isGanglia"]
+    
+    if isGanglia:
+        nGanglia = info["n ganglia"]
+        nAgents = nGanglia
+        if nAgents ==1:
+         #the way in which policies are saved consider the format of 1 ganglion as a single element array of policies
+            isHive = False
+        if isHive:
+            ag,gindxs  = ([0]*nGanglia,range(nGanglia))
+        else:
+            ag,gindxs  = (range(nGanglia),range(nGanglia))
+    else:
+        #MULTIAGENT
+        if isHive:
+            nAgents = 1
+            ag,sindxs  = ([0]*env._nsuckers,range(env._nsuckers))
+        else:
+            nAgents = nsuckers
+            ag,sindxs  = (range(nAgents),range(env._nsuckers))
+    if isHive:
+        policy = np.array([policy.item()])#just for the way they were saved, and to allow zip loop
+
+    env.equilibrate(1000)
+    state = env.get_state()
+    # print(state)
+    # ----------------- GANGLIA SCENARIO ---------
+    if env.isGanglia:
+        padding= int(nsuckers/nAgents)
+        print("Ganglia")
+        print("n Gagnlia = ",nGanglia)
+        print("IS HIVE =",isHive)
+        for t in trange(steps): 
+            encoded_state = [globals.interpret_binary(s) for s in state]
+            action = []
+            # if isHive:
+                # for k in range(env._nsuckers):
+                #     #get on-policy action
+                #     action.append(policy[encoded_state[k]])
+            # else:
+            for a,gind in zip(ag,gindxs):#agent,ganglion index
+                if epsilonGreedyFail:
+                    if np.random.random() < (1 - epsilon):
+                        action.append(globals.make_binary(policy[a][encoded_state[gind]],padding))
+                    else:
+                        action.append(globals.make_binary(np.random.randint(0,env.action_space_dim),padding))
+                else:
+                    action.append(globals.make_binary(policy[a][encoded_state[gind]],padding))
+
+            
+            action_flattened = [a for al in action for a in al] #or list of list with first index on agent (ganglia)
+            if not epsilonGreedyFail:
+                #Generalize for any number of failing suckers
+                suckers = list(np.arange(1,nsuckers-1)) #EXCLUDE BASE AND TIP
+                for i in range(failingSuckers):
+                    devil = random.choice(suckers)
+                    if np.random.random() < (1 - epsilon):
+                        pass
+                    else:
+                        action_flattened[devil] = abs(action_flattened[devil]-1)
+                    suckers.remove(devil)
+
+            state,r,_t=env._stepOverdamped(action_flattened)
+
+
+        # ----------- MULTIAGENT SCENARIO ------------
+                
+    else:
+        print("Multiagent")
+        print("IS HIVE =",isHive)
+        for t in trange(steps): 
+            action = []
+            for a,sid in zip(ag,sindxs): #agent,sucker index
+                #get on policy action
+                 if epsilonGreedyFail:
+                    if np.random.random() < (1 - epsilon):
+                        action.append(policy[a][state[sid]])
+                    else:
+                        action.append(np.random.randint(0,env.action_space_dim))
+                
+            if not epsilonGreedyFail:
+                #Generalize for any number of failing suckers
+                suckers = list(np.arange(1,nsuckers-1)) #EXCLUDE BASE AND TIP
+                for i in range(failingSuckers):
+                    devil = random.choice(suckers)
+                    if np.random.random() < (1 - epsilon):
+                        pass
+                    else:
+                        action[devil] = abs(action[devil]-1)
+                    suckers.remove(devil)
+             
+            state,r,_t=env.step(action)
+
+   
+    print("(Norm) Velocity=",env.get_averageVel()/env.x0)
+
+    ## TODO ALL THE RETURNED MEASURES..
+
 def onPolicyStateActionVisit(env,policy,isHive):
     '''
     Returns for each sucker the frequency each multiagent state is played.
@@ -392,11 +518,15 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     if value.ndim>1:
         value = np.sum(value,axis=1) #total value for all agents
     #INFO:x0=%.3f, tLengthavailable states/all possible:%d/%d\n %(visitedStates,Q.state_space_dim
-    header = "x0=%.3f. Visited states under random_policy:%d/%d\nindx\tnorm vel\tactiveSts[%%]\tvisitedStates\tTotal av_value"%(env.x0,len(visitedRandom),Q.state_space_dim)
+    tentacleInfo = 'n suckers = %d, T length = %d, omega = %.2f, x0= %.3f Type: %s\n'%(Q._nsuckers,env.tentacle_length,env.omega,env.x0,type)
+    paramInfo = 'Convergence criterion (tollerance) = %.3f\nPlateau exploration parameters: lr = %.4f\tepsilon =%.3f\tsteps = %d\n'%(info['convergence'],info['lr'],info['eps'],info['steps'])
+    polInfo = "Visited states under random_policy:%d/%d\nindx\tnorm vel\tactiveSts[%%]\tvisitedStates\tTotal av_value"%(len(visitedRandom),Q.state_space_dim)
+    header = tentacleInfo + paramInfo + polInfo
     now = datetime.now().ctime()
     if runtimeInfo is not None:
         footer = "runtime for training: "+runtimeInfo+"\nCurrent time: "+now
-    footer = "Current time: "+now
+    else:
+        footer = "Current time: "+now
     np.savetxt(fileName,np.column_stack((np.array(polIndx),np.round(norm_vels,6),np.round(activeS,3)*100,visitedStates,np.round(value,3))),fmt=' %d\t%.6f\t\t%.1f\t%d\t\t%.3f',header=header,footer=footer)
 
     Q._refPolicy = Q.getPolicy()
