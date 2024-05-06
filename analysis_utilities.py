@@ -48,12 +48,112 @@ def anal_vel_l0norm(N,omega,x0Fraction):
 
 ###################
 ########################        POLICY ANALYSIS TOOLS   
+# def movieFailure(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=False):
+#     import random
+def policyImporter(folder):
+    import re
+    import glob
+    filenames = glob.glob(folder+"*.npy")
+    print(filenames)
+    input()
+    policies = []
+    for filename in filenames:
+        print(filename)
+        match_Ganglia = re.search("(\d)(GANGLIA)",filename)  
+        match_Hive = re.search("HIVE",filename)  
+        if match_Hive:
+            print("hive")
+            isHive=True
+        else:
+            print("not hive")
+            isHive=False
+        if match_Ganglia:
+            nGanglia = int(match_Ganglia.group(1))
+            print(nGanglia,"Ganglia")
+        else:
+            print("multiagent")
+            nGanglia = 0
+        policy = np.load(filename,allow_pickle=True)
+        pol={"policy":policy,"ganglia":nGanglia,"hive":isHive}
+        # print(nGanglia,isHive)
+        policies.append(pol)
+    
+    return policies
 
+def policyRobustnessStudy(policies,suckerCentric=True,plot=True,n_suckers=12):
+    from env import Environment
+    sim_shape = (20,)
+    t_position = 100
+    results=[]
+    if plot ==True :
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.ion()
+        if suckerCentric:
+            epsilon = 1 #100% failure probability of n failing suckers randomly chosen
+            title = "Random sucker failure\nRandom choice prob = %d %%"%(epsilon*100)
+            xlabel = "# failing suckers" #but not always the same, is always randomly chosen
+        else:
+            title = "Agent epsilon failure"
+            xlabel = "epsilon"
+        fig = plt.subplot(xlabel=xlabel, ylabel='velocity (normalized)')
+        fig.set_title(label=title)
+    
+    for pol in policies:
+        vels =[]
+        policy = pol["policy"]
+        n_ganglia = pol["ganglia"]
+        isHive= pol["hive"]
+        if n_ganglia>0:
+            ganglia=True
+            if isHive:
+                architecture = "%d Ganglia HIVE"%n_ganglia
+            else:
+                architecture = "%d Ganglia"%n_ganglia
+        else:
+            ganglia=False
+            if isHive:
+                architecture = "Multiagent HIVE"
+            else:
+                architecture = "Multiagent"
+        print("\n\n** %s **\n"%architecture)
+        env = Environment(n_suckers,sim_shape,t_position,omega =0.1,isOverdamped=True,is_Ganglia=ganglia,nGanglia=n_ganglia)
+    #A. SUCKER CENTRIC: Epsilon 100% robustness with respect to n suckers
+        if suckerCentric:
+            failing_suckers = []
+            for fs in range(env._nsuckers):
+                vel = robustnessAnal(env,policy,isHive,epsilon,failingSuckers=fs,epsilonGreedyFail=False)
+                vels.append(vel)
+                failing_suckers.append(fs+1)
+            
+            out = (failing_suckers,vels)
+        #B. AGENT CENTRIC: Robustness with respect to increasing epsilon
+        else:
+            epsilons = np.linspace(0,1,10)
+            for epsilon in epsilons:
+                vel = robustnessAnal(env,policy,isHive,epsilon,epsilonGreedyFail=True)
+                vels.append(vel)
+            out = (epsilons,vels)
+        results.append(out)
+        if plot==True:
+            fig.plot(out[0],out[1],'-o',lw=5,label = architecture)
+            fig.legend()
+    input()
+    return results
+    
 
-def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
+def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=False,doMovie = False):
     '''
     Returns a plot/data on decay of velocity as a function of the #suckers failing when playing the given policy.
     Usage: loop externally to extract correspondent velocity. 
+    2 MODES: a) AGENT CENTRIC: All agent do a random action with epsilon probability (identical to playing a epsilon greedy policy).
+                1 parameter: epsilon= prob of random action.
+             b) SUCKER CENTRIC (more comparable among architectures): n suckers at random fail with given probability. 
+                2 parameters: n failing suckers, epsilon= prob of taking a random action
+    INPUT: failingSucker = only for epsilonGreedy false: how many suckers fail
+           epsilon = probability of failure (valid for both modes)
+    OBS.: If in the sucker centric I give prob of taking the OPPOSITE action the lower boundary (all suckers fail) will be a negative velocity. 
+        I want rather that the lower boundary is the random policy, as in the epsilon greedy mode
     '''
     #Planning to use it on 12s. Might be interesting to consider 20s-->save best policies!!
 
@@ -67,8 +167,6 @@ def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
     #Consider creating a dedicate plot function which also loops this funciton for different # sucker failures
     # and also makes a small video
     import random
-    failingSuckers = 1
-    epsilon = 0.1
 
 
 
@@ -77,6 +175,16 @@ def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
     nsuckers = env._nsuckers
     info = env.info
     isGanglia = info["isGanglia"]
+    if epsilonGreedyFail==False:
+        print("<INFO> : Sucker centric perturbation analysis")
+        print("n faling suckers = ",failingSuckers)
+        print("Probability of failure = %d%%"%(epsilon*100))
+    else:
+        print("<INFO> : Agent centric (epsilon greedy) perturbation analysis")
+        print("Probability of random action = %d%%"%(epsilon*100))
+    # if epsilonGreedyFail==False and failingSuckers ==0:
+    #     print("<WARNING> : no failing suckers.. ")
+    #     input("continue?")
     
     if isGanglia:
         nGanglia = info["n ganglia"]
@@ -98,8 +206,9 @@ def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
             ag,sindxs  = (range(nAgents),range(env._nsuckers))
     if isHive:
         policy = np.array([policy.item()])#just for the way they were saved, and to allow zip loop
+    
 
-    env.equilibrate(1000)
+    env.reset(equilibrate = True)
     state = env.get_state()
     # print(state)
     # ----------------- GANGLIA SCENARIO ---------
@@ -108,6 +217,8 @@ def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
         print("Ganglia")
         print("n Gagnlia = ",nGanglia)
         print("IS HIVE =",isHive)
+
+        # nRandom =0
         for t in trange(steps): 
             encoded_state = [globals.interpret_binary(s) for s in state]
             action = []
@@ -119,28 +230,36 @@ def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
             for a,gind in zip(ag,gindxs):#agent,ganglion index
                 if epsilonGreedyFail:
                     if np.random.random() < (1 - epsilon):
+                        # randomChoice = 0
                         action.append(globals.make_binary(policy[a][encoded_state[gind]],padding))
                     else:
-                        action.append(globals.make_binary(np.random.randint(0,env.action_space_dim),padding))
+                        # randomChoice=1
+                        action.append(globals.make_binary(np.random.randint(0,env.action_space),padding))
                 else:
                     action.append(globals.make_binary(policy[a][encoded_state[gind]],padding))
-
+            # nRandom+=randomChoice
             
             action_flattened = [a for al in action for a in al] #or list of list with first index on agent (ganglia)
             if not epsilonGreedyFail:
                 #Generalize for any number of failing suckers
-                suckers = list(np.arange(1,nsuckers-1)) #EXCLUDE BASE AND TIP
+                # suckers = list(np.arange(1,nsuckers-1)) #EXCLUDE BASE AND TIP
+                suckers = list(np.arange(0,nsuckers))
                 for i in range(failingSuckers):
                     devil = random.choice(suckers)
+                    # print(devil)
                     if np.random.random() < (1 - epsilon):
                         pass
                     else:
-                        action_flattened[devil] = abs(action_flattened[devil]-1)
+                        # action_flattened[devil] = abs(action_flattened[devil]-1) #does exaclty the contrary of what prescibed
+                        action_flattened[devil] =np.random.randint(0,2)
                     suckers.remove(devil)
-
+                # input()
             state,r,_t=env._stepOverdamped(action_flattened)
 
+            if doMovie and t%10==0:
+                env.render()
 
+        # print("check random choice=",nRandom)
         # ----------- MULTIAGENT SCENARIO ------------
                 
     else:
@@ -150,29 +269,38 @@ def robustnessAnal(env,policy,isHive,epsilonGreedyFail=False):
             action = []
             for a,sid in zip(ag,sindxs): #agent,sucker index
                 #get on policy action
-                 if epsilonGreedyFail:
+                if epsilonGreedyFail:
                     if np.random.random() < (1 - epsilon):
                         action.append(policy[a][state[sid]])
                     else:
-                        action.append(np.random.randint(0,env.action_space_dim))
-                
+                        action.append(np.random.randint(0,env.action_space)) #OBS: in this case there's a 50% probability to do the right choice..
+                else:
+                    action.append(policy[a][state[sid]])
             if not epsilonGreedyFail:
                 #Generalize for any number of failing suckers
-                suckers = list(np.arange(1,nsuckers-1)) #EXCLUDE BASE AND TIP
+                # suckers = list(np.arange(1,nsuckers-1)) #EXCLUDE BASE AND TIP
+                suckers = list(np.arange(0,nsuckers))
                 for i in range(failingSuckers):
                     devil = random.choice(suckers)
+                    # print(devil)
                     if np.random.random() < (1 - epsilon):
                         pass
                     else:
-                        action[devil] = abs(action[devil]-1)
-                    suckers.remove(devil)
+                        # action[devil] = abs(action[devil]-1) #opposite action
+                        action[devil] =np.random.randint(0,2)
+                    suckers.remove(devil) #pick another sucker to fail
+
+                    #OBS can achieve the same with random.sample(suckers,failingSuckers) but cannot re-extract for every sucker if epsilon different from 1
              
             state,r,_t=env.step(action)
+            if doMovie and t%10==0:
+                env.render()
 
    
     print("(Norm) Velocity=",env.get_averageVel()/env.x0)
 
-    ## TODO ALL THE RETURNED MEASURES..
+    return env.get_averageVel()/env.x0
+
 
 def onPolicyStateActionVisit(env,policy,isHive):
     '''
