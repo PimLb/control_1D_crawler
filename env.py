@@ -441,7 +441,7 @@ class   Environment(object):
         alpha = math.atan(self._omega/(k*k))
         vCMtheory = vp*self.amplitude*math.cos(alpha)
         print("Optimal analitical velocity periodic tentacle OVERDAMPED= ", vCMtheory)
-
+    
     def reset(self,equilibrate = False,exploringStarts = False,fps = FPS):
 
         #maybe useless. I'm afraid of memory leaks..
@@ -455,14 +455,14 @@ class   Environment(object):
         self._tposition = self._universe["target"]
         self._tposition.extend(t_position) 
         self._suckers.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,self.amplitude,exploringStarts=exploringStarts))
-
+        self._episode += 1
         if equilibrate:
             self.equilibrate(1000)
 
         self._t = 0 #current time
         self._nsteps = 0
         self._telapsed =[]
-        self._episode += 1
+        
 
         self._length =[]
         
@@ -507,6 +507,7 @@ class   Environment(object):
             action = [[0]*self._nsuckers]
         for k in range(steps):
             self.step(action)
+        self._episode = 1
         self._vel = []
         self._nsteps = 0
         self._telapsed =[]
@@ -835,6 +836,69 @@ class   Environment(object):
 
         #Working in progress.. here the difficulty is to include scenarios with several control centers  = clustered multiagent 
         
+    def _stepOverdampedVIRTUAL(self,action):
+        '''
+        Same as below excluding update of old positions and observables.
+        Sufficient to consider absolute positions for the purpose.
+        '''
+        
+        # #GET ALL CURRENT POSITIONS
+        # positions =[]
+        # for sucker in self._suckers:
+        #     position.append() 
+        
+        if action[0] == 0:
+            pright = self._suckers[0].rightNeighbor._abslutePosition_old
+            dist = pright -self._suckers[0]._abslutePosition_old
+
+            inst_vel = (dist  - self.l0(self._t,0))
+            delta_x=self.deltaT * inst_vel
+            # self._suckers[0].position = self._suckers[0]._position_old + delta_x
+            self._suckers[0]._abslutePosition = self._suckers[0]._abslutePosition_old + delta_x
+        else:
+            self._suckers[0]._abslutePosition = self._suckers[0]._abslutePosition_old.copy()
+        # self._suckers[0].lastAction=action[0]
+        #INTERMEDIATE
+        for sucker in self._suckers[1:self._nsuckers-1]:
+            k = sucker._id
+            # sucker.lastAction = action[k]
+            if action[k] == 1:  
+                sucker._abslutePosition = sucker._abslutePosition_old.copy()
+            else:
+                pleft = sucker.leftNeighbor._abslutePosition_old
+                pright = sucker.rightNeighbor._abslutePosition_old
+                me = sucker._abslutePosition_old
+
+                dist =  pright -me
+                right_force = (dist  - self.l0(self._t,k))
+
+                dist = me - pleft
+          
+                left_force = -(dist - self.l0(self._t,k-1))
+
+                inst_vel = right_force + left_force
+                delta_x =  self.deltaT * inst_vel
+                # sucker.position = sucker._position_old + delta_x
+                sucker._abslutePosition = sucker._abslutePosition_old + delta_x#here by setter method includes boundaries
+        #TIP
+        if action[self._nsuckers-1] == 0:
+            pleft = self._suckers[self._nsuckers-1].leftNeighbor._abslutePosition_old
+            dist = self._suckers[self._nsuckers-1]._abslutePosition_old -pleft
+            inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
+            delta_x = self.deltaT * inst_vel
+            # self._suckers[self._nsuckers-1].position = self._suckers[self._nsuckers-1]._position_old + delta_x
+            self._suckers[self._nsuckers-1]._abslutePosition = self._suckers[self._nsuckers-1]._abslutePosition_old + delta_x
+        else:
+            self._suckers[self._nsuckers-1]._abslutePosition = self._suckers[self._nsuckers-1]._abslutePosition_old.copy()
+        # self._suckers[self._nsuckers-1].lastAction=action[self._nsuckers-1]
+
+        instVel = self.inv_DeltaT*(self.get_CM()-self._CM_position[-1]) #needs only absolute positions
+
+        #NOT updating time
+
+        return  instVel
+    
+
 
     def _stepOverdamped(self,action):
         '''
@@ -842,98 +906,53 @@ class   Environment(object):
         NEW: imoplementing syncronous version of overdamped based on evolving previous position from finite velocity (finite friction)
         #IMPORTANT: Consider that any update on .position, enforces automatically boundary conditions
         '''
-        # print(action)
-            # #BASE
-            #     if action[0] == 0:
-            #         self._agents[0].position = self._agents[0].rightNeighbor._position - self.l0(self._t,0)
-            #     else:
-            #         pass
-            #     self._agents[0].lastAction=action[0]
-            #     for sucker in self._agents[1:self._nsuckers-1]:
-            #         k = sucker._id
-            #         # print(k)
-            #         if action[k] == 1:  
-            #             pass #Do nothing.. position unchanged
-            #         elif action[k] == 0:
-            #             pleft = sucker.leftNeighbor._position
-            #             pright = sucker.rightNeighbor._position
-            #             if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
-            #                 pright = pright + self._box.boundary
-            #             sucker.position = 0.5*(pright + pleft + self.l0(self._t,k-1) - self.l0(self._t,k))
-            #         sucker.lastAction = action[k]
-            #     #TIP 
-            #     if action[self._nsuckers-1] == 0:
-            #         self._agents[self._nsuckers-1].position = self._agents[self._nsuckers-1].leftNeighbor._position +self.l0(self._t,self._nsuckers-1-1)
-            #     else:
-            #         pass
-            #     self._agents[self._nsuckers-1].lastAction=action[self._nsuckers-1]
-                #Syncronous overdamped
-                #BASE
-        # print("here")
-
-        if action[0] == 0:
+        
+        if action[0] == 0: #NOT ANCHORING
             pright = self._suckers[0].rightNeighbor._abslutePosition_old
             dist = pright -self._suckers[0]._abslutePosition_old
-            # if dist<0:
-            #     # old_dist = dist.copy()
-            #     dist += self._box.boundary
-                # print(old_dist,dist)
             inst_vel = (dist  - self.l0(self._t,0))
             delta_x=self.deltaT * inst_vel
             self._suckers[0].position = self._suckers[0]._position_old + delta_x
             self._suckers[0]._abslutePosition = self._suckers[0]._abslutePosition_old + delta_x
-        else:
-            # if (self._agents[0].rightNeighbor._position -self._agents[0].position)<0:
-            #     print("base active ", self._agents[0].position)
-            pass
+        else: #ANCHORING
+            self._suckers[0].position = self._suckers[0]._position_old.copy()
+            self._suckers[0]._abslutePosition = self._suckers[0]._abslutePosition_old.copy()
         self._suckers[0].lastAction=action[0]
         #INTERMEDIATE
         for sucker in self._suckers[1:self._nsuckers-1]:
             k = sucker._id
             sucker.lastAction = action[k]
-            if action[k] == 1:  
-                pass #Do nothing.. position unchanged
-            else:
-                pleft = sucker.leftNeighbor._abslutePosition.copy()
-                pright = sucker.rightNeighbor._abslutePosition.copy()
-                me = sucker._abslutePosition_old.copy()
+            if action[k] == 1:  #ANCHORING
+                #could skip and do nothing, but want to avoid strange memory leaks by manipulating for instance stepOverdampedVIRTUAL
+                sucker.position = sucker._position_old.copy()
+                sucker._abslutePosition = sucker._abslutePosition_old.copy()
+            else: # NOT ANCHORING
+                pleft = sucker.leftNeighbor._abslutePosition_old
+                pright = sucker.rightNeighbor._abslutePosition_old
+                me = sucker._abslutePosition_old
 
                 dist =  pright -me
-                # if dist<0:
-                #     dist+=self._box.boundary
                 right_force = (dist  - self.l0(self._t,k))
 
                 dist = me - pleft
-                # if dist<0:
-                #     dist+=self._box.boundary
                 left_force = -(dist - self.l0(self._t,k-1))
 
                 inst_vel = right_force + left_force
-                # crossed=False
-                # if pright - pleft <0: #can happen only if boundary crossed but i expect episode to end before!
-                #     # print("here pl,me, pr",pleft,me,pright)
-                #     pright = pright + self._box.boundary
-                #     if (me-pleft)<0:
-                #         me += self._box.boundary
-                #     # print("here2 pr pl",pleft,me,pright)
-                #     # print('to check memory copy..', sucker._position_old)
-                #     # crossed = True
-                # inst_vel = (pright + pleft-2*me + self.l0(self._t,k-1) - self.l0(self._t,k))
                 delta_x =  self.deltaT * inst_vel
                 sucker.position = sucker._position_old + delta_x
                 sucker._abslutePosition = sucker._abslutePosition_old + delta_x#here by setter method includes boundaries
         #TIP
-        if action[self._nsuckers-1] == 0:
+        if action[self._nsuckers-1] == 0: #NOT ANCHORING
             pleft = self._suckers[self._nsuckers-1].leftNeighbor._abslutePosition_old
             dist = self._suckers[self._nsuckers-1]._abslutePosition_old -pleft
-            # if dist<0:
-            #     dist+=self._box.boundary
             inst_vel = -(dist - self.l0(self._t,self._nsuckers-2))
             delta_x = self.deltaT * inst_vel
             self._suckers[self._nsuckers-1].position = self._suckers[self._nsuckers-1]._position_old + delta_x
             self._suckers[self._nsuckers-1]._abslutePosition = self._suckers[self._nsuckers-1]._abslutePosition_old + delta_x
-        else:
-            pass
+        else: # ANCHORING
+            self._suckers[self._nsuckers-1].position = self._suckers[self._nsuckers-1]._position_old.copy()
+            self._suckers[self._nsuckers-1]._abslutePosition = self._suckers[self._nsuckers-1]._abslutePosition_old.copy()
+
         self._suckers[self._nsuckers-1].lastAction=action[self._nsuckers-1]
 
 
@@ -948,6 +967,7 @@ class   Environment(object):
         reward,terminal = self._getReward()
         newState = self.get_state()
         
+        #update time
 
         self._telapsed.append(self._t)
         self._t += self.deltaT
@@ -1042,14 +1062,16 @@ class   Environment(object):
 
 
 
-    def render(self,special_message = None):
+    def render(self,colored_suckers=None,special_message = None):
         
     #     #calls by default observation
     #     if self.render_mode == "rgb_array":
         # print("rendering")
-        return self._render_frame(special_message)
+        if colored_suckers is None:
+            colored_suckers = {}
+        return self._render_frame(special_message,colored_suckers)
 
-    def _render_frame(self,special_message):
+    def _render_frame(self,special_message,colored_suckers):
         
         if self.window is None:
             npixels = np.amax(self._box.boundary)
@@ -1100,13 +1122,15 @@ class   Environment(object):
 #         # loop on all suckers
             n = 0
             nagents = self._nsuckers
-            for agent in self._suckers:
+            for indx,agent in enumerate(self._suckers):
                 n +=1
                 a = agent.position
                 if agent.lastAction == 0:
                     color = violet
                 else:
                     color = blue
+                    if indx in colored_suckers:
+                        color = red
                 try:
                     a[1]
                     pygame.draw.circle(
