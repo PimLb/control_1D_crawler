@@ -117,9 +117,7 @@ if not os.path.exists(outFolderRawData):
     os.makedirs(outFolderRawData)
     print("creating raw data folder")
 
-#CONVERGENCE PARAMETERS
-max_attempts = 3
-plateau_conv = 0.01 #0.5percent
+
 
 # input_fileName =  sys.argv[1]
 import argparse
@@ -132,7 +130,10 @@ except:
      exit("Could not open input file. EXIT")
 inputParam = ReadInput(infile)
 
-
+#CONVERGENCE PARAMETERS
+max_attempts = 5
+plateau_conv = inputParam.convergence
+explore_plateau = True
 # n_suckers = int(input("insert number of suckers\n"))
 n_suckers = inputParam.ns
 
@@ -169,7 +170,7 @@ if not is_Ganglia:
         steps = 6000
         typename="MULTIAGENT_HIVE"
     else:
-        steps = 12000
+        steps = 6000
         typename="MULTIAGENT"
 else:
     # is_Ganglia = True
@@ -186,7 +187,7 @@ else:
 
 # answ= input("Plateau expoloration? ")
 # if answ:
-explore_plateau = True
+
 # else:
 #     explore_plateau = False
 
@@ -227,7 +228,7 @@ for attempts in range(max_attempts):
             print("\n <WARNING> max attempts for convergence reached..")
             print(elapsed_time)
             break
-        steps += int(default_steps/2)
+        steps += default_steps #int(default_steps/2)
         print("did not converge--> increasing steps: ", steps)
         #CHECK
         # Q.plot_av_value(labelPolicyChange=True)
@@ -258,7 +259,7 @@ saveData(Q,typename,outFolder=outFolderFigures)
 #here other runs just to get stats on sub otpimal policies by exporing a bit in the plateau region
 
     #not saving for multiagent.. too many..
-info = {'lr':lrPlateau,'eps':epsPlateau,'steps':default_steps}
+info = {'lr':lrPlateau,'eps':epsPlateau,'steps':default_steps,'convergence':plateau_conv}
 print("analysis of last # policies..")
 bestPolIndx = getPolicyStats(Q,env,info = info,runtimeInfo=RuntimeInfo,outFolder = outFolderRawData,nLastPolicies = n_episodesPlateau+1)
 

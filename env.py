@@ -277,14 +277,19 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=0.1,is_Ganglia = False,isOverdamped = True, nGanglia =1): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=0.1,is_Ganglia = False,isOverdamped = True, nGanglia =1,fixN=False): 
          #control cluster refers to the number of suckers, the total number of spring involved is n_suckers-1
         
-        x0 = tentacle_length/n_suckers
+        if fixN:
+            self.N = 5
+            # x0=tentacle_length/n_suckers
+            x0=1
+        else:
+            self.N = n_suckers
+            x0 = tentacle_length/self.N
         amplitude = x0/x0Fraction
-        self.x0 = x0
         self.amplitude = amplitude
-        self.N = n_suckers
+        self.x0 = x0
         self.wavelength = self.N*self.x0
         self._nsuckers=n_suckers
         self.omega = omega 
@@ -439,8 +444,8 @@ class   Environment(object):
         vp = omega/k
         #CAREFULL if carrier mode not 1 needs correction
         alpha = math.atan(self._omega/(k*k))
-        vCMtheory = vp*self.amplitude*math.cos(alpha)
-        print("Optimal analitical velocity periodic tentacle OVERDAMPED= ", vCMtheory)
+        vCMtheory = vp*self.amplitude*math.cos(alpha)/self.x0
+        print("Optimal normalized analitical velocity periodic tentacle OVERDAMPED= ", vCMtheory)
     
     def reset(self,equilibrate = False,exploringStarts = False,fps = FPS):
 
@@ -927,7 +932,7 @@ class   Environment(object):
                 sucker.position = sucker._position_old.copy()
                 sucker._abslutePosition = sucker._abslutePosition_old.copy()
             else: # NOT ANCHORING
-                pleft = sucker.leftNeighbor._abslutePosition_old
+                pleft = sucker.leftNeighbor._abslutePosition_old 
                 pright = sucker.rightNeighbor._abslutePosition_old
                 me = sucker._abslutePosition_old
 

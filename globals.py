@@ -46,6 +46,7 @@ class ReadInput(object):
         self.min_epsilon = 0.001
         self.lr_plateau = 0.001
         self.epsilon_plateau = 0.1
+        self.convergence = 0.01
 
         self.scheduling_episodes = 1000
         self.max_episodes = 1500
@@ -78,6 +79,7 @@ class ReadInput(object):
             match_schedEp = re.match("(scheduling\s*Episodes\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
             match_maxEpisodes = re.match("(max\s*Episodes\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
             match_polExplEpisodes = re.match("(policy\s*exploration\s*episodes\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
+            match_polConvergence = re.match("(convergence\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
             gotNGanglia = True
             if match_omega:
                 print(line)
@@ -155,6 +157,12 @@ class ReadInput(object):
                 if self.polExplEpisodes != polExplEpisodes:
                     self.polExplEpisodes = polExplEpisodes
                     print("<WARNING>: setting policy exploration episodes different from default: ",self.polExplEpisodes)
+            if match_polConvergence:
+                print(line)
+                polConvergence = float(match_polConvergence.group(2))
+                if self.convergence != polConvergence:
+                    self.convergence = polConvergence
+                    print("<WARNING>: setting plateau convergence criterion different from default: ",self.convergence)
                 # match_steps = re.match("steps\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
                 # if match_steps:
                 #     self.match_steps = int(match_steps.group(2))
@@ -163,3 +171,5 @@ class ReadInput(object):
             pass
         else:
             raise ImportError("MISSING ESSENTIAL INFO")
+
+

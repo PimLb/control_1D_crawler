@@ -1,6 +1,6 @@
 
 from globals import *
-import numpy as np
+# import numpy as np
 import analysis_utilities
 
 
@@ -234,7 +234,7 @@ class actionValue(object):
             self.plot_convergence = self._plot_convergence_hive
             self.plot_av_value = self._plot_av_value_hive
             if adaptiveScheduling:
-                self._moving_window = 50
+                self._moving_window = 100
                 self._tollerance = plateau_conv 
                 self._decimalDigits = str(self._tollerance)[::-1].find('.')
                 print("<WARNING>: Adaptive (hive) scheduling. Tollerance = %.3f\n"%self._tollerance)
@@ -254,7 +254,7 @@ class actionValue(object):
             # So far lr identical for all
             self._agentUpdateSet = set([a for a in range(self._nAgents)])
             if adaptiveScheduling:
-                self._moving_window = 50
+                self._moving_window = 100
                 self._tollerance = plateau_conv 
                 self._decimalDigits = str(self._tollerance)[::-1].find('.')
                 print("<WARNING>: Adaptive scheduling. Tollerance = %.3f. Convergence checked for each agent (if more than one.)\n"%self._tollerance)
@@ -579,6 +579,7 @@ class actionValue(object):
             if isConv or isMax:
                 print("End condition reached")
                 print(diff)
+                print(conv_array)
                 print("resetting update set")
                 self._agentUpdateSet = set([a for a in range(self._nAgents)])
                 self.set_referencePolicy()

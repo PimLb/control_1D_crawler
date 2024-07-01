@@ -7,7 +7,8 @@ from tqdm import trange
 import numpy as np
 from datetime import datetime
 import copy
-
+import matplotlib.pyplot as plt
+import env
 
 stateMap = {'->|<-':0,'->|->':1,'->|tip':6,'<-|<-':2,'<-|->':3,'<-|tip':7,'base|<-':4,'base|->':5}
 stateMap_nonHive = {'->|<-':0,'->|->':1,'->|tip':0,'<-|<-':2,'<-|->':3,'<-|tip':1,'base|<-':0,'base|->':1}
@@ -38,9 +39,9 @@ def u0(s,t,omega,N,amplitude,l0):
     return u
 
 
-def anal_vel_l0norm(N,omega,x0Fraction):
+def anal_vel_l0norm(N,omega):
     k = 2*np.pi/N
-    amplitude_fraction = 1/x0Fraction
+    amplitude_fraction = 1/env.x0Fraction
     phase_vel = omega/k
     alpha = np.arctan(omega/(k*k))
     # reducedOmega = omega/(k*k)
@@ -92,12 +93,14 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
     results=[]
     n_suckers = policies[0]["n_suckers"]
     if plot ==True :
-        import matplotlib.pyplot as plt
         plt.figure()
         plt.ion()
         if suckerCentric:
             epsilon = 1 #100% failure probability of n failing suckers randomly chosen
-            title = "%dSUCKERS Tentacle  Random sucker failure\nRandom choice prob = %d %%"%(n_suckers,epsilon*100)
+            if randomSuckerSel:
+                title = "%dSUCKERS Tentacle  Random sucker failure\nRandom choice prob = %d %%"%(n_suckers,epsilon*100)
+            else:
+                title = "%dSUCKERS Tentacle 1st order more influential suckers failure \nRandom choice prob = %d %%"%(n_suckers,epsilon*100)
             xlabel = "failing suckers" #but not always the same, is always randomly chosen
             mode = "suckerCentric"
             fmt="%d\t\t%.4f"
@@ -138,7 +141,11 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
     #A. SUCKER CENTRIC: Epsilon 100% robustness with respect to n suckers
         if suckerCentric:
             failing_suckers = []
-            for fs in range(env._nsuckers):
+            if randomSuckerSel:
+                max_failingSuckers = env._nsuckers+1 #all suckers
+            else:
+                max_failingSuckers = 3 #2
+            for fs in range(max_failingSuckers):
                 vel = robustnessAnal(env,policy,isHive,epsilon,failingSuckers=fs,epsilonGreedyFail=False,randomSuckerSel = randomSuckerSel)
                 vels.append(vel)
                 failing_suckers.append(fs)
@@ -161,13 +168,14 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
             np.savetxt("results/robustness/"+architecture+".txt",np.column_stack((out[0],np.round(out[1],4))),fmt = fmt,header=xlabel+"\tvel")
         if plot==True:
             fig.plot(out[0],out[1],'-o',lw=5,label = label)
+            fig.axhline(0,ls='--',c='black')
             fig.legend()
     input()
     return results
 
-def selectRelevantSucker(env,onPolActions):
+def selectRelevantSucker(env,onPolActions,descending=False):
     '''
-    Returns indexes of the most important sucker in the movement by making all sucker play wrong action and check which was the most impactful.
+    Returns sorted indexes of the less (or most) important sucker in the movement by making all sucker play wrong action and check which was the most impactful.
      -- NOT SURE   UPDATE TO DO : If step provided averages over a longer time the obtained velocity to assess most impactful sucker
     INPUT: environment,on policy actions
     ATTENCTION: This analysis is not precise especially when considering more than one failing sucker since cannot correlate the effect of several suckers together in this form..
@@ -198,13 +206,16 @@ def selectRelevantSucker(env,onPolActions):
         
     vels = np.array(vels)
     # print(vels)
-    ids = np.argsort(vels) #sorted indices from smaller to larger
+    ids = np.argsort(vels) #sorted indices from smaller to larger velocity
+    main = ids[0]
+    if descending:
+        ids=ids[::-1]
     # print(ids)
     # if np.unique(ids).size != ids.size:
     #     print(vels)
     #     print(ids)
     #     input("PROBLEM")
-    return ids 
+    return ids,main
 
 
 def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=False,doMovie = False, steps = 20000, randomSuckerSel = True):
@@ -274,6 +285,8 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
 
     env.reset(equilibrate = True)
     state = env.get_state()
+    currentT=[]
+    mostImportantID=[]
     # print(state)
     # ----------------- GANGLIA SCENARIO ---------
     if env.isGanglia:
@@ -284,6 +297,7 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
 
         # nRandom =0
         for t in trange(steps): 
+            currentT.append(t)
             encoded_state = [globals.interpret_binary(s) for s in state]
             action = []
             # if isHive:
@@ -317,7 +331,8 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
                 gotDevil=False
                 if not randomSuckerSel:
                     #at each time step according to current situation (action played before), establish which are most impactful suckers (neglecting correlations)
-                    devils = selectRelevantSucker(env,action_flattened)
+                    devils,main = selectRelevantSucker(env,action_flattened)
+                    mostImportantID.append(main)
                 for i in range(failingSuckers):
                     if randomSuckerSel: #default
                         devil = random.choice(suckers)
@@ -344,7 +359,7 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
             # for sucker in env._suckers:
             #     print(sucker._abslutePosition,sucker._abslutePosition_old)
             
-            if doMovie and t%20==0:
+            if doMovie and t%2==0:
                 if not epsilonGreedyFail:
                     env.render(colored_suckers=devil_suckers)
                 else:
@@ -358,6 +373,7 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
         print("IS HIVE =",isHive)
         for t in trange(steps): 
             action = []
+            currentT.append(t)
             for a,sid in zip(ag,sindxs): #agent,sucker index
                 #get on policy action
                 if epsilonGreedyFail:
@@ -377,7 +393,8 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
                 suckers = list(np.arange(0,nsuckers))
                 if not randomSuckerSel:
                     #at each time step according to current situation (action played before), establish which are most impactful suckers (neglecting correlations)
-                    devils = selectRelevantSucker(env,action)
+                    devils,main = selectRelevantSucker(env,action)
+                    mostImportantID.append(main)
                 for i in range(failingSuckers):
                     if randomSuckerSel:#default 
                         devil = random.choice(suckers)
@@ -403,11 +420,27 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
             # print(action)
             # input()
             state,r,_t=env.step(action)
-            if doMovie and t%20==0:
+            if doMovie and t%2==0:
                 if not epsilonGreedyFail:
                     env.render(colored_suckers=devil_suckers)
                 else:
                     env.render()
+    if randomSuckerSel==False and failingSuckers ==1:
+        plt.figure()
+        plt.ion()
+        fig = plt.subplot(xlabel='time step', ylabel='suckerID')
+        if isGanglia:
+            if isHive:
+                fig.set_title(label='%dSuckers %dGanglia HIVE\nMost influencial sucker analysis'%(nsuckers,nGanglia))
+            else:
+                fig.set_title(label='%dSuckers %dGanglia\nMost influencial sucker analysis'%(nsuckers,nGanglia))
+        else:
+            if isHive:
+                fig.set_title(label='%dSuckers Multiagent HIVE\nMost influencial sucker analysis'%nsuckers)
+            else:
+                fig.set_title(label='%dSuckers Multiagent \nMost influencial sucker analysis'%nsuckers)
+        fig.plot(currentT,mostImportantID,'o',ms=4)
+
 
    
     print("(Norm) Velocity=",env.get_averageVel()/env.x0)
