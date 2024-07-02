@@ -276,7 +276,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude,exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length=10,carrierMode = 1,omega=1,is_multiagent = True,isOverdamped = True): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length=10,carrierMode = 1,omega=1,isOverdamped = True): 
          #shape in a tuple in the form (nx,ny)
          # now t_position is only rightwall or leftwall
          # in future, target --> list of targets
@@ -297,7 +297,6 @@ class   Environment(object):
         print("%d\t%d"%(self._nsuckers,self.N))
 
 
-        self.isMultiagent = is_multiagent
         self._isOverdamped = isOverdamped
 
         self.carrierMode = carrierMode
@@ -324,11 +323,10 @@ class   Environment(object):
 
         
 
-        if is_multiagent:
-            self._nagents = n_suckers
-            print("**Multiagent**")
-        else:
-            self._nagents = 1
+        
+        self._nagents = n_suckers
+        print("**Multiagent**")
+        
         if self._isOverdamped:
             print("OVERDAMPED DYNAMICS")
             self.step=self._stepOverdamped
@@ -377,17 +375,14 @@ class   Environment(object):
         self.metadata = { "render_fps": FPS}
         
 
-        if is_multiagent == True:
-            # self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
-            # self.action_space_dim = 2
-            self.action_space= 2
-            # self.state_space = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}#,'base|<- ','base|->' ,'->|tip ','<-|tip ']#4 internal + 2 tip + 2 base
-            # self.state_space_dim = 4
-            self.state_space = 4
-        else:
-            #OBSOLETE
-            self.action_space = np.power(2,n_suckers)
-            self.state_space = np.power(8,n_suckers)# np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
+        
+        # self.action_space = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
+        # self.action_space_dim = 2
+        self.action_space= 2
+        # self.state_space = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}#,'base|<- ','base|->' ,'->|tip ','<-|tip ']#4 internal + 2 tip + 2 base
+        # self.state_space_dim = 4
+        self.state_space = 4
+       
 
         self.info={}
         self.info["learning space"]=(self.state_space,self.action_space)
