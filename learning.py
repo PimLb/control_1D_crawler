@@ -1183,3 +1183,11 @@ class actionValue(object):
             return out_action,encoded_state
         else:
             return out_action
+        
+    
+    def loadPolicy(self,policy):
+        '''
+        Set by hand the default policy
+        '''
+        self._refPolicy = policy
+        
