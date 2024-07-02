@@ -417,6 +417,7 @@ class   Environment(object):
         self.info["learning space"]=(self.state_space,self.action_space)
         self.info["n suckers"]=self._nsuckers
         self.info["isGanglia"] = self.isGanglia
+        self.info["isPeriodic"] = False
     @property
     def isOverdamped(self):
         return self._isOverdamped
