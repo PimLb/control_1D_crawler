@@ -5,6 +5,8 @@ from globals import *
 
 
 np.seterr(invalid='ignore')
+state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
+action_space_name = {1:'anchoring', 0:'not anchoring'}
 # import math
 # import random
 #CODES TODO:
@@ -388,6 +390,7 @@ class   Environment(object):
         self.info["learning space"]=(self.state_space,self.action_space)
         self.info["n suckers"]=self._nsuckers
         self.info["isGanglia"] = False  #NOT SUPPORTED
+        self.info["isPeriodic"] = True
 
     @property
     def isOverdamped(self):
@@ -553,7 +556,7 @@ class   Environment(object):
         # if dleft<0:
         #     dleft += self._box.boundary
         left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-1))
-        states.append(self.state_space[(left_tension,right_tension)])
+        states.append(state_space_name[(left_tension,right_tension)])
         self._agents[0]._position_old = self._agents[0].position.copy()
         self._agents[0]._abslutePosition_old = self._agents[0]._abslutePosition.copy()
 
@@ -572,7 +575,7 @@ class   Environment(object):
             #     dleft += self._box.boundary
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
             # print((left_tension,right_tension))
-            states.append(self.state_space[(left_tension,right_tension)])
+            states.append(state_space_name[(left_tension,right_tension)])
 
             #update old posiitons
             sucker._position_old = sucker.position.copy()
