@@ -387,6 +387,11 @@ class   Environment(object):
             self.action_space = np.power(2,n_suckers)
             self.state_space = np.power(8,n_suckers)# np.power(4,n_suckers) # Qmatrix --> self.state_space* self.action_space
 
+        self.info={}
+        self.info["learning space"]=(self.state_space,self.action_space)
+        self.info["n suckers"]=self._nsuckers
+        self.info["isGanglia"] = False  #NOT SUPPORTED
+
     @property
     def isOverdamped(self):
         return self._isOverdamped
