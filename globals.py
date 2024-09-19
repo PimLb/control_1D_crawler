@@ -36,7 +36,7 @@ import re
 comment = ['^#','\n']
 comment = '(?:% s)' % '|'.join(comment)
 class ReadInput(object):
-    def __init__(self,input_file,sim_shape=(20,),t_position=100,tLength=10,isOverdamped=True):
+    def __init__(self,input_file,sim_shape=(20,),t_position=100,tLength=10,isOverdamped=True,adaptPeriod = True):
         #OBS: t_position useless now maybe remove everywhere this unused concept
         self.sim_shape = sim_shape
         self.t_position = t_position
@@ -52,6 +52,8 @@ class ReadInput(object):
         self.max_episodes = 1500
         self.polExplEpisodes = 200
         self.isGanglia = False
+
+        self.periodIsTength = adaptPeriod
         # self.steps = 10000
         # try:
         #     self._inFile = open(input_fileName,'r')
@@ -61,7 +63,12 @@ class ReadInput(object):
         self.get()
     def get(self):
         lines = self._inFile.readlines()
-        
+        gotNGanglia = True
+        gotOmega = False
+        gotNS= False
+        gotGangliaInfo = False
+        gotHive= False
+        gotPeriod = False
         for line in lines:
             if(re.match(comment,line)):
                 continue
@@ -80,7 +87,14 @@ class ReadInput(object):
             match_maxEpisodes = re.match("(max\s*Episodes\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
             match_polExplEpisodes = re.match("(policy\s*exploration\s*episodes\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
             match_polConvergence = re.match("(convergence\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
-            gotNGanglia = True
+
+            match_period = re.match("(\s*periodicity\s*=\s*)(\d*\.?\d+)",line,flags=re.IGNORECASE)
+
+            
+            if match_period:
+                print(line)
+                self.period = int(match_period.group(2))
+                gotPeriod = True
             if match_omega:
                 print(line)
                 self.omega = float(match_omega.group(2))
@@ -91,12 +105,12 @@ class ReadInput(object):
                 self.ns = int(match_ns.group(2))
                 gotNS=True
             if match_isGanglia:
-                gotNGanglia = False
                 print(line)
                 gotGangliaInfo = True
                 # raise ImportError("Missing training mode (architecture/contrtol center)")
                 if match_isGanglia.group(2) == 'True':
                     self.isGanglia = True
+                    gotNGanglia = False
                 else:
                     self.isGanglia = False
             if self.isGanglia:
@@ -167,9 +181,23 @@ class ReadInput(object):
                 # if match_steps:
                 #     self.match_steps = int(match_steps.group(2))
                 #     print("<WARNING>: setting scheduling episodes different from default: ",self.match_steps)
+        
         if gotGangliaInfo and gotNGanglia and  gotHive and gotOmega and gotNS:
             pass
         else:
+            print(gotGangliaInfo)
+            print(gotNGanglia)
+            print(gotNS)
+            print(gotHive)
+            print(gotOmega)
             raise ImportError("MISSING ESSENTIAL INFO")
+        
+        if self.periodIsTength:
+            pass
+        else:
+            if gotPeriod:
+                pass
+            else:
+                raise ImportError("MISSING PERIODICITY INFO")
 
 

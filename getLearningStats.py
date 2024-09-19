@@ -16,12 +16,19 @@ from datetime import timedelta
 from tqdm import tqdm
 from tqdm import trange
 
+readPeriod = False
+
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
 print(currentdir)
+parentdir = currentdir.split('/')[:-1]
+parentdir = '/'.join(parentdir)
 print(parentdir)
+
 sys.path.insert(0, parentdir) 
+
+
+
 import env
 from env import Environment
 from learning import actionValue
@@ -128,7 +135,13 @@ try:
     infile = args.infile
 except:
      exit("Could not open input file. EXIT")
-inputParam = ReadInput(infile)
+
+if readPeriod:
+    inputParam = ReadInput(infile,adaptPeriod=False)
+    period = inputParam.period
+else:
+    inputParam = ReadInput(infile,adaptPeriod=True)
+    period = None
 
 #CONVERGENCE PARAMETERS
 max_attempts = 5
@@ -164,7 +177,7 @@ if not is_Ganglia:
     print("Each sucker is an agent")
     # is_Ganglia = False
     
-    nGanglia = 1
+    nGanglia = 0
     if isHive ==1:
         # isHive = True
         steps = 6000
@@ -198,7 +211,7 @@ else:
 
 print("Setting up universe")
 print("Max episodes: ",max_episodes)
-print("steps x episode:", steps)
+print("steps x episode exploration:", steps)
 
 #INITIALIZATIONS:
 
@@ -206,11 +219,24 @@ print("steps x episode:", steps)
 
 
 
-env = Environment(n_suckers,sim_shape,t_position,omega=omega,tentacle_length=tentacle_length,is_Ganglia=is_Ganglia,nGanglia=nGanglia)
+env = Environment(n_suckers,sim_shape,t_position,omega=omega,tentacle_length=tentacle_length,is_Ganglia=is_Ganglia,nGanglia=nGanglia,period=period)
 Q =actionValue(env.info,max_episodes=max_episodes,hiveUpdate=isHive,min_epsilon = min_epsilon,min_lr=min_lr,adaptiveScheduling = True,plateau_conv=plateau_conv) 
 
 elapsed_time=[]
 default_steps = steps
+
+if is_Ganglia:
+    if nGanglia ==1 :
+        steps = 1000000
+    if nGanglia ==2:
+        if isHive:
+            steps = 60000
+        else:
+            steps = 100000
+if typename=="MULTIAGENT":
+    steps = 54000
+
+print("steps x episode training:", steps)
 
 for attempts in range(max_attempts):
     starttime = time.perf_counter()

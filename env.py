@@ -277,13 +277,12 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
 
 
 class   Environment(object):
-    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=0.1,is_Ganglia = False,isOverdamped = True, nGanglia =1,fixN=False): 
+    def __init__(self,n_suckers,sim_shape,t_position,tentacle_length = 10,carrierMode = 1,omega=0.1,is_Ganglia = False,isOverdamped = True, nGanglia =1,period=None): 
          #control cluster refers to the number of suckers, the total number of spring involved is n_suckers-1
         
-        if fixN:
-            self.N = 5
-            # x0=tentacle_length/n_suckers
-            x0=1
+        if period is not None:
+            self.N = period
+            x0=tentacle_length/n_suckers
         else:
             self.N = n_suckers
             x0 = tentacle_length/self.N
@@ -462,8 +461,7 @@ class   Environment(object):
         self._tposition.extend(t_position) 
         self._suckers.extend(build_tentacle(self._nsuckers,self._box,self.l0,self.x0,self.amplitude,exploringStarts=exploringStarts))
         self._episode += 1
-        if equilibrate:
-            self.equilibrate(1000)
+        
 
         self._t = 0 #current time
         self._nsteps = 0
@@ -489,6 +487,9 @@ class   Environment(object):
         if not self._isOverdamped:
             for sucker in self._suckers:
                 sucker._acceleration_old = self._get_acceleration(sucker)
+        
+        if equilibrate:
+            self.equilibrate(1000)
         
     def reset_partial(self):
         #To reduce memory consumption for continuous problem

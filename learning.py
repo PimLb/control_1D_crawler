@@ -732,6 +732,7 @@ class actionValue(object):
             if self._parallelUpdate:
                 # encoded_state = [stateIndexMap[s] for s in state]
                 for k in range(self._nsuckers):
+                    # print(encoded_state[k])
                     out_action.append(self._refPolicy[encoded_state[k]])
             else:
                 # encoded_state_multi = [stateIndexMap_multi[s] for s in state]
@@ -981,7 +982,7 @@ class actionValue(object):
         env.equilibrate(1000)
         state = env.get_state()
         for k in range(timeFrame):
-            action,encoded_state = self.getOnPolicyAction(state,returnEncoding=True)
+            action = self.getOnPolicyAction(state)
             state,r,_t=env.step(action)
             if self._ganglia:
                 action = [a for al in action for a in al] #list of list --> list
@@ -1189,5 +1190,56 @@ class actionValue(object):
         '''
         Set by hand the default policy
         '''
+        # if self._parallelUpdate:
+        #     policy = policy.items()
+        #     print(policy)
         self._refPolicy = policy
+
+    def test(self,env,policy,steps = 10000,doMovie=True):
+        from tqdm import trange
+        #consistency checks
+        learning_space = env.info["learning space"]
+        state_space_dim = learning_space[0]
+        action_space_dim = learning_space[1]
+        nsuckers = env.info["n suckers"]
+        isGanglia = env.info["isGanglia"]
+        if self.state_space_dim != state_space_dim:
+            print("Not expected environment. Exit")
+            return
+        elif self.action_space_dim != action_space_dim:
+            print("Not expected environment. Exit")
+            return
+        elif self._nsuckers != nsuckers:
+            print("Not expected environment. Exit")
+            return
+        elif self._ganglia != isGanglia:
+            print("Not expected environment. Exit")
+            return
+        try:
+            nPolicies = len(policy)
+            isHive = False
+            print("number of independent agents (not Hive) = ",nPolicies)
+        except TypeError:
+            isHive = True
+        if self._parallelUpdate != isHive:
+            print("loaded policy not consistent with initialization (hive/not hive)")
+            return
+
+        self.loadPolicy(policy)
         
+        env.reset(equilibrate = True)
+        state = env.get_state()
+        cumulativeR = 0
+        for s in trange(steps):
+            action = self.getOnPolicyAction(state)
+            state,r,_t = env.step(action)
+            cumulativeR +=r
+            if doMovie:
+                if s % 10 ==0:
+                    env.render()
+        normVel = env.get_averageVel()/env.x0
+        print("total Reward = ", cumulativeR)
+        return normVel
+
+    def getCurrentPolicy(self):
+        return self._refPolicy
