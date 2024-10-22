@@ -59,13 +59,14 @@ def policyImporter(folder):
     print(filenames)
     directoryName = filenames[-1].split("/")[-2]
     print(directoryName)
-    n_suckers = int(re.match("(\d+)",directoryName).group(1))
-    print(n_suckers)
-    input()
+    # n_suckers = int(re.match("(\d+)",directoryName).group(1))
+    n_suckers = int(input("insert # suckers\n"))
+    # print(n_suckers)
+    # input()
     policies = []
-   
+    order_list = []
     for filename in filenames:
-        pol = {}
+        pol = {} 
         print(filename)
         match_Ganglia = re.search("(\d)(GANGLIA)",filename)  
         match_Hive = re.search("HIVE",filename)  
@@ -87,18 +88,33 @@ def policyImporter(folder):
             nGanglia = int(match_Ganglia.group(1))
             print(nGanglia,"Ganglia")
             pol["ganglia"] = nGanglia
+            if nGanglia ==1:
+                order = 2
+            else:
+                if isHive:
+                    order = 3
+                else:
+                    order = 4
         else:
             print("multiagent")
             nGanglia = 0
             pol["ganglia"] = nGanglia
+            if isHive:
+                order = 0
+            else:
+                order = 1
+        order_list.append(order)
+            
         policy = np.load(filename,allow_pickle=True)
         pol["policy"] = policy
         pol["n_suckers"] = n_suckers
         # pol={"policy":policy,"ganglia":nGanglia,"hive":isHive,"n_suckers":n_suckers}
         # print(nGanglia,isHive)
         policies.append(pol)
+    print(order_list)
+    return_policies = [p for _,p in sorted(zip(order_list,policies))]
     
-    return policies
+    return return_policies
 
 def loadPolicy(filename):
     policy = np.load(filename,allow_pickle=True)
@@ -214,7 +230,7 @@ def suckerImportance(env,policy,secondOrder = True):
         plt.show()
     return ranked_averaged_devils
 
-def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,randomSuckerSel =True):
+def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,randomSuckerSel =True):
     instantaneusWorseSucker = False
     goTohigherOrder = True
     average = False
@@ -258,36 +274,48 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
 
     fig_allPdfs = None
     fig_allPdfs2 = None
-    width = 0.8
-    width2 = 0.8
+    width = 0.9
+    width2 = 0.9
+
+
+
     for pol in policies:
         vels =[]
         policy = pol["policy"]
         n_ganglia = pol["ganglia"]
         isHive= pol["hive"]
+        
         if n_ganglia>0:
             ganglia=True
             if isHive:
                 label = "%dGanglia HIVE"%n_ganglia
                 architecture = mode+"Robustness_%dGanglia_HIVE_%dsuckers"%(n_ganglia,n_suckers)
+                color = "green"
             else:
                 label = "%dGanglia"%n_ganglia
                 architecture = mode+"Robustness_%dGanglia_%dsuckers"%(n_ganglia,n_suckers)
+                if n_ganglia == 2:
+                    color = "tab:orange"
+                elif n_ganglia ==1:
+                    color = "tab:red"
         else:
             ganglia=False
             if isHive:
                 label = "Multiagent HIVE"
                 architecture = mode+"Robustness_Multiagent_HIVE_%dsuckers"%n_suckers
+                color = "tab:blue"
             else:
                 label = "Multiagent"
                 architecture = mode+"Robustness_Multiagent_%dsuckers"%n_suckers
+                color = "tab:purple"
         print("\n\n** %s **\n"%label)
         try:
-            period = pol["period"]
+            period = pol["periodicity"]
             print("policy learned on wavelength different from tentacle length")
             print("N = ",period)
         except:
             period=None
+        
         env = Environment(n_suckers,sim_shape,t_position,omega =0.1,isOverdamped=True,is_Ganglia=ganglia,nGanglia=n_ganglia,period = period)
     #A. SUCKER CENTRIC: Epsilon 100% robustness with respect to n suckers
         
@@ -299,7 +327,10 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
                         plt.ion()
                         fig_allPdfs = plt.subplot(xlabel='sucker ID', ylabel='importance 1st order')
                         fig_allPdfs.set_xticks(np.arange(n_suckers))
-                        fig_allPdfs.set_title(label="sucker importance")
+                        if period is not None:
+                            fig_allPdfs.set_title("Sucker importance 1st order,  periodicity = %d"%period)
+                        else:
+                            fig_allPdfs.set_title(label="sucker importance")
                     else:
                         pass
                     #interested to gather stat over worse sucker in time. From that i establish how often a sucker is the worse
@@ -330,16 +361,16 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
                         print(ranked_averaged_devils)
                         print("1st Most important: ",ranked_averaged_devils[0])
                     importantSuckers [label] = [ranked_averaged_devils[0]]
-                    plt.figure()
-                    plt.ion()
+                    # plt.figure()
+                    # plt.ion()
                     # fig2 = plt.subplot(xlabel='sucker ID', ylabel='1st order importance')
                     # fig2.set_title(label = label)
                     # fig2.set_xticks(np.arange(n_suckers))
                     # fig2.bar(np.arange(pdf.size),pdf)
-
-                    fig_allPdfs.bar(np.arange(pdf.size),pdf,label=label,width=width)
+                    
+                    fig_allPdfs.bar(np.arange(pdf.size),pdf,label=label,width=width,color=color)
                     fig_allPdfs.legend()
-                    width -=0.1
+                    width -=0.18
                     if goTohigherOrder: 
                         fixID = ranked_averaged_devils[0]
                         labels = [str(s)for s in np.arange(n_suckers)]
@@ -351,9 +382,13 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
                             plt.figure()
                             plt.ion()
                             fig_allPdfs2 = plt.subplot(xlabel='sucker ID', ylabel='importance 2nd order')
-                            # print("labels",labels)
                             fig_allPdfs2.set_xticks(np.arange(n_suckers),labels=labels)
-                            fig_allPdfs2.set_title(label="sucker importance")
+                            if period is not None:
+                                fig_allPdfs2.set_title("Sucker importance 2nd order,  periodicity = %d"%period)
+                            else:
+                                fig_allPdfs2.set_title(label="sucker importance")    
+                            # print("labels",labels)
+                            
 
                         if not average:
                             pdf = np.zeros(n_suckers)
@@ -388,16 +423,17 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
                         # fig2.set_title(label = label)
                         # fig2.set_xticks(np.arange(n_suckers),labels = labels)
                         # fig2.bar(np.arange(pdf.size),pdf)
-                        fig_allPdfs2.bar(np.arange(pdf.size),pdf,label=label,width=width2)
+                        
+                        fig_allPdfs2.bar(np.arange(pdf.size),pdf,label=label,width=width2,color=color)
                         fig_allPdfs2.legend()
-                        width2-=0.1
+                        width2-=0.18
                         importantSuckers [label].append([ranked_averaged_devils[1]])
             # input("continue?")
             failing_suckers = []
             if randomSuckerSel:
                 max_failingSuckers = env._nsuckers+1 #all suckers
             else:
-                max_failingSuckers = env._nsuckers+1 #all suckers
+                max_failingSuckers = 2#env._nsuckers+1 #all suckers
             for fs in range(max_failingSuckers):
                 vel = robustnessAnal(env,policy,isHive,epsilon,failingSuckers=fs,epsilonGreedyFail=False,randomSuckerSel = randomSuckerSel,whichDevils = ranked_averaged_devils)
                 vels.append(vel)
@@ -420,7 +456,7 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=False,
         else:
             np.savetxt("results/robustness/"+architecture+".txt",np.column_stack((out[0],np.round(out[1],4))),fmt = fmt,header=xlabel+"\tvel")
         if plot==True:
-            fig.plot(out[0],out[1],'-o',lw=5,label = label)
+            fig.plot(out[0],out[1],'-o',lw=5,label = label,color = color)
             fig.axhline(0,ls='--',c='black')
             fig.legend()
             plt.show()
@@ -847,7 +883,7 @@ def onPolicyStateActionVisit(env,policy,isHive):
     return stateFreqPerSucker,actionFreqPerSucker,normActFreq
     
 
-def plotTSvisits(actionFreq,refActionfreq=None,maxNorm = False):
+def plotTSvisits(actionFreq,refActionfreq=None,maxNorm = False,withNumbers = True,vmax=1):
     import matplotlib.pyplot as plt
     """
     If ref is given, the color plot is normalized by the reference (standard choice would be to use the standard hive policy..)
@@ -930,11 +966,16 @@ def plotTSvisits(actionFreq,refActionfreq=None,maxNorm = False):
         Znorm = np.round(Z,2)
     # print(Z[2])
     # fig.pcolor(X, Y, Z)
-    fig.imshow(Z)
-    for i in range(len(keys)):
-        for j in range(nsuckers):
-            text = fig.text(j, i, Znorm[i, j],
-                       ha="center", va="center", color="w")
+    img =fig.imshow(Z,cmap="viridis",vmin=0,vmax=vmax)
+    if withNumbers:
+        for i in range(len(keys)):
+            for j in range(nsuckers):
+                text = fig.text(j, i, Znorm[i, j],
+                        ha="center", va="center", color="w")
+    else:
+        #show color bar
+        plt.colorbar(img,location = 'bottom',orientation = "horizontal")
+        pass
         
         
         
@@ -994,19 +1035,20 @@ def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
 
 
 
-def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",info=None):
+def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",info=None,savePolicies = False):
     """
     Useful if some oscillation present on the last segment (pseudo_plateau) of the triaining. Can gather stats on the different policies the Q matrix jumps in.. 
     TODO : value like this not very meaningful.. always different number since precise Q are all different...
     """
     
     # I  expect runtimeInfo contains also info on number of steps and episodes with eventual number of convergence cycles
-
+    distributed = False
     if Q._ganglia==False:
         if Q._parallelUpdate:
             type="MULTIAGENT_HIVE"
         else:
             type="MULTIAGENT"
+            distributed = True
     else:
         nAgents = Q._nAgents
         if Q._parallelUpdate:
@@ -1062,10 +1104,87 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     stdSorted = np.std(sorted_norm_vels[0:int(nLastPolicies/2)])
 
     sortedIndexes = np.argsort(norm_vels)[::-1]
+    # print(sorted_norm_vels)
+    # print(sortedIndexes)
+    # print("--")
+    # print(sorted_norm_vels[0:int(nLastPolicies/2)])
     bestPolIndexes = sortedIndexes[0:int(nLastPolicies/2)]
     #NEW COUNT NUMBER OF DISTINT POLICIES EXPLORED AMONG ALL AND AMONG THE BEST 250
-    npolicies = countPolicies(Q._lastPolicies,Q._parallelUpdate)
-    npoliciesBest = countPolicies(Q._lastPolicies[bestPolIndexes],Q._parallelUpdate)
+    policies = np.array(Q._lastPolicies)[::-1] #[::-1]Correction for how policies are organized. 
+    #No impact on unique but it matters when passing best policies
+
+    if savePolicies:
+        policyDistribution,uniquePolicies,pp = countPolicies(policies,Q._parallelUpdate,returnPolicies = True,distributed=distributed)
+        fileName2 = outFolder+"AllPolicies_%s"%(type)+".npy"
+        np.save(fileName2,pp)
+    else:
+        policyDistribution,uniquePolicies = countPolicies(policies,Q._parallelUpdate,distributed=distributed)
+    npoliciesUnique = len(policyDistribution)
+    # if savePolicies:
+    #     policyDistributionBest,uniquePoliciesBest,pp = countPolicies(policies[bestPolIndexes],Q._parallelUpdate,returnPolicies = True)
+    #     fileName2 = outFolder+"AllBestPolicies_%s"%(type)+".npy"
+    #     np.save(fileName2,pp)
+    
+    policyDistributionBest,uniquePoliciesBest = countPolicies(policies[bestPolIndexes],Q._parallelUpdate,distributed=distributed)
+    npoliciesBest = len(policyDistributionBest)
+
+    ###### TODO: I want to build a curve with frequency of each unique policy. 
+    # I order them from most to less frequent and want to analyse velocity of those unique policies
+    # Observation: to recompute velocities  is not computationally efficient. I could compute them here and renormalize with counts..
+    # policyDistribution = np.sort(countMatrix)[::-1]
+    # index = np.argsort(countMatrix)[::-1]
+    #reordering from most to less frequent
+    # uniquePolicies = uniquePolicies[index]
+    normVelUnique = []
+    print("Analysing unique policies")
+
+    #OBS : policy distribution is an arrey uniquePolicies is a list or list of list
+    for unPol in uniquePolicies:
+        Q.loadPolicy(unPol)
+        vel,state_freq,norm_activeSuckers,visited = Q.evaluatePolicy(env)
+        normVelUnique.append(vel)
+    
+    normVelUnique = np.array(normVelUnique)
+    
+    
+    #checks:
+    averageFromUnique = np.sum(normVelUnique*policyDistribution)
+    stdFromUnique = np.sqrt(np.sum(np.power(normVelUnique,2)*policyDistribution) - averageFromUnique**2)
+    normVelUniqueRanked = np.sort(normVelUnique)[::-1]
+    indxRanked = np.argsort(normVelUnique)[::-1]
+    policyDistributionRanked = policyDistribution[indxRanked]
+    numberOfReplicas = np.rint(policyDistributionRanked*nLastPolicies).astype(int)
+
+    np.savetxt("uniquePolDistr_"+type+".txt",np.column_stack((numberOfReplicas,policyDistributionRanked,np.round(normVelUniqueRanked,6))),fmt='\t%d\t%.4f\t\t%.6f', header = "Frequency of the policy. Rows are a ranked according to the associated velocity.\nnumber\tfrequency\tnorm vel", footer="total number of policies = %d\n total number of unique policies=%d"%(nLastPolicies,len(uniquePolicies)))
+    #best in the previous way has to be estabished in a more complex way.. because I don't want first 250 unique policies. 
+    # For instance if all unique policies are less than 250, I recover same average as before
+    #the previous calculation included redudancies
+
+    # print(policyDistributionRanked*nLastPolicies)
+    multiplicity = np.cumsum(numberOfReplicas)
+    # print(multiplicity)
+    # print(np.where(multiplicity>=int(nLastPolicies/2)))
+    indx = np.where(multiplicity>=(nLastPolicies/2))[0][0] + 1 #first index to enter array, second to take first index after which condition true
+    policyDistributionBest = numberOfReplicas[0:indx]/np.sum(numberOfReplicas[0:indx]) #need to renormalize accordingly
+    averageFromUniqueBest = np.sum(normVelUniqueRanked[0:indx]*policyDistributionBest)
+    stdFromUniqueBest = np.sqrt(np.sum(np.power(normVelUniqueRanked[0:indx],2)*policyDistributionBest) - averageFromUniqueBest**2)
+    #now is actually more correct. Indeed why truncate a policy in the weighted average? 
+     #for instance if best pol has multeplicity 1 and second best 350, second best should still be weighted accordingly
+    
+    print("\n***\n average vel = %.4f+- %.4f; number of distint best unique pol = %d "%(averageFromUnique,stdFromUnique,len(uniquePolicies))) 
+    print("average best vel (IMPROVED CALCULATION) = %.4f+- %.4f; number of distint best unique pol = %d  \n******\n"%(averageFromUniqueBest,stdFromUniqueBest,indx)) 
+    indx = indx-1 # to recover correct location (I putted +1 for slicing simplicity)
+    if  multiplicity[indx]> int(nLastPolicies/2) :
+        # print(numberOfReplicas[0:indx+1])
+        # print(numberOfReplicas[indx])
+        numberOfReplicas[indx] = int(nLastPolicies/2)-np.sum(numberOfReplicas[0:indx])
+        #alternative numberOfReplicas[indx] = int(nLastPolicies/2)- multiplicity[indx-1]
+        # print(numberOfReplicas[indx])
+        policyDistributionBest = numberOfReplicas[0:indx]/np.sum(numberOfReplicas[0:indx]) 
+        averageFromUniqueBest = np.sum(normVelUniqueRanked[0:indx]*policyDistributionBest)
+        stdFromUniqueBest = np.sqrt(np.sum(np.power(normVelUniqueRanked[0:indx],2)*policyDistributionBest) - averageFromUniqueBest**2)
+        print("average best vel (EQUIVALENT CALCULATION) = %.4f+- %.4f; number of distint best unique pol = %d  \n******\n"%(averageFromUniqueBest,stdFromUniqueBest,indx+1)) 
+    
     
     outFileName = "SUMMARY_policyMeasuresFor%dsuckers_omega%.2f_%s.txt"%(Q._nsuckers,env.omega,type)
     outFile = open(outFileName,'w')
@@ -1077,15 +1196,27 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     if info is not None:
         line = '\nConvergence criterion (tollerance) = %.3f\nPlateau exploration parameters: lr = %.4f\tepsilon =%.3f\tsteps = %d'%(info['convergence'],info['lr'],info['eps'],info['steps'])
         outFile.write(line)
-    line='\n\nNORMALIZED VEL AVERAGE= %.4f +- %.4f\t number of distint policies = %d'%(np.round(average_normVel,4),np.round(std_normVel,4),npolicies)
+    line='\n\nNORMALIZED VEL AVERAGE= %.4f +- %.4f\t number of distint policies = %d'%(np.round(average_normVel,4),np.round(std_normVel,4),npoliciesUnique)
     outFile.write(line)
     line='\nNORMALIZED VEL BEST%d POLICIES= %.4f +- %.4f\t number of distint policies = %d'%(int(nLastPolicies/2),np.round(avergeSorted,4),np.round(stdSorted,4),npoliciesBest)
     outFile.write(line)
     line='\nNORMALIZED VEL MAX= %.4f\t Correspondent policy index: %d'%(np.round(max_vel,4),bestPolIndx)
     outFile.write(line)
+
+    #NEW
+    line= "\n ++++ NEW: reuslts from unique pol analysis +++++\n"
+    outFile.write(line)
+    line='\nNORMALIZED VEL AVERAGE =  %.4f +- %.4f Number of unique policies = %d'%(np.round(averageFromUnique,4),np.round(stdFromUnique,4),len(uniquePolicies))
+    outFile.write(line)
+    line='\nNORMALIZED VEL BEST%d UNIQUE POLICIES= %.4f +- %.4f Number of unique best policies = %d'%(indx+1,np.round(averageFromUniqueBest,4),np.round(stdFromUniqueBest,4),indx +1)
+    outFile.write(line)
+
     if runtimeInfo is not None:
         line = "\n\nRUNTIME: "+runtimeInfo
         outFile.write(line)
+    now = datetime.now().ctime()
+    line = "\n#Date: "+now
+    outFile.write(line)
 
     
 
@@ -1100,7 +1231,7 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     paramInfo = 'Convergence criterion (tollerance) = %.3f\nPlateau exploration parameters: lr = %.4f\tepsilon =%.3f\tsteps = %d\n'%(info['convergence'],info['lr'],info['eps'],info['steps'])
     polInfo = "Visited states under random_policy:%d/%d\nindx\tnorm vel\tactiveSts[%%]\tvisitedStates\tTotal av_value"%(len(visitedRandom),Q.state_space_dim)
     header = tentacleInfo + paramInfo + polInfo
-    now = datetime.now().ctime()
+    # now = datetime.now().ctime()
     if runtimeInfo is not None:
         footer = "runtime for training: "+runtimeInfo+"\nCurrent time: "+now
     else:
@@ -1109,45 +1240,58 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
 
     Q._refPolicy = Q.getPolicy()
 
-
+    outFile.close()
     return bestPolIndx
 
 
-def countPolicies(policies,isHive):
-    #n is the agent t is the policy counter
-    # before = np.array(list(self._lastPolicies[-t-1][n].values()))
-    # after = np.array(list(self._lastPolicies[-t][n].values()))
-    # difference =np.sum(before-after)
-    # isHive = Q._parallelUpdate
-    # policies = Q._lastPolicies
-    #nAgents = Q._nAgents
-    nPolicies = len(policies)
+def countPolicies(policies,isHive,returnPolicies = False,distributed = False):
     
+    nPolicies = len(policies)
+    axis = 0 
+    pol_values = []
+    pol=[]
     if isHive:
-        axis = 0 
-        nAgents = 1
         #here I have one single policy F
-        pol = []
         for t in range(nPolicies):
-            pol.append(list(policies[t].values()))  
-
+            pol_values.append(list(policies[t].values()))  
+            pol.append(policies[t])
     else:
-        axis = 1 
         #ATTENZIONE: devi comparare agente per agente (non ha senso comparare tra suckers o ganglia diversi..)
         nAgents = len(policies[0])
-        # print(nAgents)
-        pol = []
-        for a in range(nAgents):
+        for t in range(nPolicies):
+            polAgent_values = []
             polAgent = []
-            for t in range(nPolicies):
-                polAgent.append(list(policies[t][a].values()))
+            for a in range(nAgents):
+                if distributed:
+                    if (a==0 or a == (nAgents-1)):
+                        policies[t][a]["dummy1"] = -1
+                        policies[t][a]["dummy2"] = -1
+                polAgent_values.append(list(policies[t][a].values()))
+                polAgent.append(policies[t][a]) #row is the time column the agent. I have to compare each row to establish identity
+            pol_values.append(polAgent_values)
             pol.append(polAgent)
-    pol = np.array(pol) #pol[nAgent,nSavedPolicy]
-    _unique,countsIdentical = np.unique(pol,axis=axis,return_counts = True) # counts is an array that tells you for any elements how many times
-    countDifferent = nPolicies-len(countsIdentical) #since counts identical is an array indicating at each position number of identical columns in the unique matrix
-    # or countDifferent = nPolicies - unique.shape[1]
-        
-    return countDifferent
+    pol_values = np.array(pol_values) #pol[nAgent,nSavedPolicy]
+    pol = np.array(pol)
+    _unique,indx,countsIdentical = np.unique(pol_values,axis=axis,return_counts = True,return_index=True) # counts is an array that tells you for any elements how many times
+    uniquePol = pol[indx]
+    # countDifferent = len(countsIdentical) #since counts identical is an array indicating at each position number of identical columns or rows in the unique matrix
+    # pol = list(pol)
+    # uniquePol = list(uniquePol)
+    index = np.argsort(countsIdentical)[::-1]
+    #reordering from most to less frequent
+    uniquePol = uniquePol[index]
+    
+    policyDistribution = np.sort(countsIdentical)[::-1] 
+    policyDistribution = policyDistribution/np.sum(policyDistribution)
+    
+    #conversion necessary for good parsing to Q in the following analysis
+    pol=pol.tolist()
+    uniquePol = uniquePol.tolist()
+    if returnPolicies:
+        #for debugging
+        return policyDistribution,uniquePol,pol
+    else:
+        return policyDistribution,uniquePol
     # return counter,counterIndicized
 
 ################
@@ -1184,15 +1328,6 @@ def twoSuckerCorrelation(A,sucker_index):
     return C
 
 
-
-# def extractResults(infile):
-#     '''
-#     Read recap file, returns index with best policy, average and standard deviation. 
-#     This routine could be coupled with the extraction of the relevant Action Matrix (time serie of the action performed by a policy), and relevant analysis of it.
-#     '''
-
-#     out_file = open('SUMMARY_'+ infile +'.out','w')
-    
 
 
 
