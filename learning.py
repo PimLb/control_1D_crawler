@@ -724,38 +724,6 @@ class actionValue(object):
         return self._av_value[-n_previous]
         # print("current on policy = last -%d policy"%n_previous)
 
-        
-    def getOnPolicyAction(self,state,returnEncoding = False):
-        out_action=[]
-        if self._ganglia==False:
-            encoded_state = state
-            if self._parallelUpdate:
-                # encoded_state = [stateIndexMap[s] for s in state]
-                for k in range(self._nsuckers):
-                    # print(encoded_state[k])
-                    out_action.append(self._refPolicy[encoded_state[k]])
-            else:
-                # encoded_state_multi = [stateIndexMap_multi[s] for s in state]
-                # encoded_state = [stateIndexMap[s] for s in state]
-                for k in range(self._nAgents):
-                    out_action.append(self._refPolicy[k][encoded_state[k]])
-            
-        else:
-            #GANGLIA (CONTROL CENTER) SCENARIO
-            #here we need a specific binary decoding for the actions and encoding for states
-            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
-            padding= int(self._nsuckers/self._nAgents)
-            if self._parallelUpdate:
-                for k in range(self._nAgents):
-                    out_action.append(make_binary(self._refPolicy[encoded_state[k]],padding))
-            else:
-                for k in range(self._nAgents):
-                    # print(k,self._refPolicy[k])
-                    out_action.append(make_binary(self._refPolicy[k][encoded_state[k]],padding))
-        if returnEncoding:
-            return out_action,encoded_state
-        else:
-            return out_action
 
     def _plot_value_hive(self):
         plt.figure(figsize=(10, 6))
@@ -1014,16 +982,28 @@ class actionValue(object):
 
         
         state_frequency = {}
+        
         if self._ganglia==False:
             # print("MULTIAGENT")
+            # if self._parallelUpdate:
             for k in stateName:
                 state_frequency[k]=0
+            # else:
+            #     for a in range(self._nAgents):
+            #         for k in stateName:
+            #             state_frequency[(a,k)]=0
         else:
             # print("CONTROL CENTER")
+        # if self._parallelUpdate:
             for k in range(self.state_space_dim):
                 state_frequency[k]=0
+            # else:
+            #     for a in range(self._nAgents):
+            #         for k in range(self.state_space_dim):
+            #             state_frequency[(a,k)]=0
         
         # print(state_frequency)
+        # print("-----")
         # state_frequency = np.zeros(n_states)
         actionPerState = analysis_utilities.actionMapState_dict(self._refPolicy,self._ganglia,self._parallelUpdate,self._nsuckers,self._nAgents)
         # print("Active sucker per state for the given policy with multiplicity (for many agents)")
@@ -1037,16 +1017,19 @@ class actionValue(object):
         env.equilibrate(1000)
         state = env.get_state()
         for k in range(evaluation_steps):
-            action,encoded_state = self.getOnPolicyAction(state,returnEncoding=True)
+            action,encoded_state_perTentacle,encoded_state_perAgent = self.getOnPolicyAction(state,returnEncoding=True)
+            # print(encoded_state)
+            # input()
             state,r,_t=env.step(action)
             cumulativeReward += r
             if self._ganglia:
                 action = [a for al in action for a in al] #list of list --> list
             # actionMatrix = np.column_stack([actionMatrix,np.array(action)])
             n_activeSuckers += sum(action)
-            for sid in encoded_state:
-                visitedStates.add(sid)
+            for sid in encoded_state_perTentacle:
                 state_frequency[sid] +=1 
+            for sid in encoded_state_perAgent:
+                visitedStates.add(sid)
         norm_vel = env.get_averageVel()/env.x0
         # print("NORMALIZED CM VELOCITY = ",norm_vel)
     # ************
@@ -1119,15 +1102,17 @@ class actionValue(object):
         env.equilibrate(1000)
         state = env.get_state()
         for k in range(evaluation_steps):
-            action,encoded_state = self._getTrivialAction(state,returnEncoding=True)
+            action,encoded_state_perTentacle,encoded_state_perAgent = self._getTrivialAction(state,returnEncoding=True)
             state,r,_t=env.step(action)
             cumulativeReward += r
             if self._ganglia:
                 action = [a for al in action for a in al] #list of list --> list
             n_activeSuckers += sum(action)
-            for sid in encoded_state:
-                visitedStates.add(sid)
+            for sid in encoded_state_perTentacle:
                 state_frequency[sid] +=1 
+            for sid in encoded_state_perAgent:
+                visitedStates.add(sid)
+        norm_vel = env.get_averageVel()/env.x0
     # ************
 
         averageActiveSuckers = n_activeSuckers/(k+1)
@@ -1149,10 +1134,51 @@ class actionValue(object):
         # print("Average active suckers (for null policy trivial, for random should tend to half?)")
         # print(averageActiveSuckers)
         
-        return state_frequency,visitedStates
+        return norm_vel,state_frequency,visitedStates
     
+    ###############
+    ##########
+
+
+    def getOnPolicyAction(self,state,returnEncoding = False):
+        out_action=[]
+        if self._ganglia==False:
+            encoded_state = state
+            
+            if self._parallelUpdate:
+                out_state = encoded_state
+                # encoded_state = [stateIndexMap[s] for s in state]
+                for k in range(self._nsuckers):
+                    # print(encoded_state[k])
+                    out_action.append(self._refPolicy[encoded_state[k]])
+            else:
+                out_state = [(agent,state) for agent,state in enumerate(state)]
+                # encoded_state_multi = [stateIndexMap_multi[s] for s in state]
+                # encoded_state = [stateIndexMap[s] for s in state]
+                for k in range(self._nAgents):
+                    out_action.append(self._refPolicy[k][encoded_state[k]])
+            
+        else:
+            #GANGLIA (CONTROL CENTER) SCENARIO
+            #here we need a specific binary decoding for the actions and encoding for states
+            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
+            padding= int(self._nsuckers/self._nAgents)
+            if self._parallelUpdate:
+                out_state = encoded_state
+                for k in range(self._nAgents):
+                    out_action.append(make_binary(self._refPolicy[encoded_state[k]],padding))
+            else:
+                out_state = [(agent,state) for agent,state in enumerate(encoded_state)]
+                for k in range(self._nAgents):
+                    # print(k,self._refPolicy[k])
+                    out_action.append(make_binary(self._refPolicy[k][encoded_state[k]],padding))
+        if returnEncoding:
+            return out_action,encoded_state,out_state # out state distinguishes per agent state #encoded_state is an tentacle based definition
+        else:
+            return out_action
 
     def _getRandomAction(self,state,returnEncoding = False):
+        
         action=[]
         for k in range(self._nAgents):
                 action.append(np.random.randint(0,self.action_space_dim))
@@ -1164,8 +1190,12 @@ class actionValue(object):
             encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
             padding= int(self._nsuckers/self._nAgents)
             out_action = [make_binary(a,padding) for a in action]
+        if self._parallelUpdate:
+            out_state = encoded_state
+        else:
+            out_state = [(agent,state) for agent,state in enumerate(encoded_state)]
         if returnEncoding:
-            return out_action,encoded_state
+            return out_action,encoded_state,out_state
         else:
             return out_action
         
@@ -1180,8 +1210,12 @@ class actionValue(object):
             encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
             padding= int(self._nsuckers/self._nAgents)
             out_action = [make_binary(a,padding) for a in action]
+        if self._parallelUpdate:
+            out_state = encoded_state
+        else:
+            out_state = [(agent,state) for agent,state in enumerate(encoded_state)]
         if returnEncoding:
-            return out_action,encoded_state
+            return out_action,encoded_state,out_state
         else:
             return out_action
         

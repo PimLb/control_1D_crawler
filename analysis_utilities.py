@@ -232,7 +232,7 @@ def suckerImportance(env,policy,secondOrder = True):
 
 def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,randomSuckerSel =True):
     instantaneusWorseSucker = False
-    goTohigherOrder = True
+    goTohigherOrder = False
     average = False
     importantSuckers={}
     from env import Environment
@@ -278,36 +278,43 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
     width2 = 0.9
 
 
-
+    plotIncrement = 0
     for pol in policies:
         vels =[]
         policy = pol["policy"]
         n_ganglia = pol["ganglia"]
         isHive= pol["hive"]
-        
+        line = '-o'
         if n_ganglia>0:
             ganglia=True
             if isHive:
                 label = "%dGanglia HIVE"%n_ganglia
                 architecture = mode+"Robustness_%dGanglia_HIVE_%dsuckers"%(n_ganglia,n_suckers)
                 color = "green"
+                plotIncrement = 1
             else:
                 label = "%dGanglia"%n_ganglia
                 architecture = mode+"Robustness_%dGanglia_%dsuckers"%(n_ganglia,n_suckers)
                 if n_ganglia == 2:
                     color = "tab:orange"
+                    plotIncrement = 0.5
+
                 elif n_ganglia ==1:
                     color = "tab:red"
+                    plotIncrement = 0
         else:
             ganglia=False
             if isHive:
                 label = "Multiagent HIVE"
                 architecture = mode+"Robustness_Multiagent_HIVE_%dsuckers"%n_suckers
                 color = "tab:blue"
+                plotIncrement = 2
             else:
                 label = "Multiagent"
                 architecture = mode+"Robustness_Multiagent_%dsuckers"%n_suckers
                 color = "tab:purple"
+                plotIncrement = 1.5
+                line = '--o'
         print("\n\n** %s **\n"%label)
         try:
             period = pol["periodicity"]
@@ -326,6 +333,10 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
                         plt.figure()
                         plt.ion()
                         fig_allPdfs = plt.subplot(xlabel='sucker ID', ylabel='importance 1st order')
+                        fig_allPdfs.set_xticks(np.arange(n_suckers))
+                        plt.figure()
+                        plt.ion()
+                        fig_allPdfs_lines = plt.subplot(xlabel='sucker ID', ylabel='importance 1st order')
                         fig_allPdfs.set_xticks(np.arange(n_suckers))
                         if period is not None:
                             fig_allPdfs.set_title("Sucker importance 1st order,  periodicity = %d"%period)
@@ -363,13 +374,20 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
                     importantSuckers [label] = [ranked_averaged_devils[0]]
                     # plt.figure()
                     # plt.ion()
-                    # fig2 = plt.subplot(xlabel='sucker ID', ylabel='1st order importance')
-                    # fig2.set_title(label = label)
-                    # fig2.set_xticks(np.arange(n_suckers))
-                    # fig2.bar(np.arange(pdf.size),pdf)
+                    # plt.title("first order importance "+label)
+                    # plt.ylim(-0.02,0.52)
+                    # plt.plot(np.arange(pdf.size),pdf,'-o',color=color,lw=2,ms=10)
+                    # pdf += plotIncrement
+                    pdfLine = pdf.copy()
+                    pdfLine +=plotIncrement
+                    fig_allPdfs_lines.plot(np.arange(pdf.size),pdfLine,'-o',color=color,lw=2,ms=10,label=label)
+                    # fig_allPdfs_lines.set_ylim(-0.02,0.52)
+                    # fig_allPdfs_lines.legend()
                     
+
                     fig_allPdfs.bar(np.arange(pdf.size),pdf,label=label,width=width,color=color)
                     fig_allPdfs.legend()
+                    fig_allPdfs.set_ylim(0,0.71)
                     width -=0.18
                     if goTohigherOrder: 
                         fixID = ranked_averaged_devils[0]
@@ -456,7 +474,7 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
         else:
             np.savetxt("results/robustness/"+architecture+".txt",np.column_stack((out[0],np.round(out[1],4))),fmt = fmt,header=xlabel+"\tvel")
         if plot==True:
-            fig.plot(out[0],out[1],'-o',lw=5,label = label,color = color)
+            fig.plot(out[0],out[1],line,lw=5,label = label,color = color)
             fig.axhline(0,ls='--',c='black')
             fig.legend()
             plt.show()
@@ -1263,11 +1281,11 @@ def countPolicies(policies,isHive,returnPolicies = False,distributed = False):
             polAgent = []
             for a in range(nAgents):
                 if distributed:
-                    if (a==0 or a == (nAgents-1)):
+                    if (a==0 or a == (nAgents-1)):#needed for np to not complain about inhomogeneous dimensions
                         policies[t][a]["dummy1"] = -1
                         policies[t][a]["dummy2"] = -1
-                polAgent_values.append(list(policies[t][a].values()))
-                polAgent.append(policies[t][a]) #row is the time column the agent. I have to compare each row to establish identity
+                polAgent.append(policies[t][a]) 
+                polAgent_values.append(list(policies[t][a].values()))#row is the time column the agent. I have to compare each row to establish identity
             pol_values.append(polAgent_values)
             pol.append(polAgent)
     pol_values = np.array(pol_values) #pol[nAgent,nSavedPolicy]
