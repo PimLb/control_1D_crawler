@@ -961,7 +961,7 @@ class actionValue(object):
 
         return actionMatrix
 
-    def evaluatePolicy(self,env):
+    def evaluatePolicy(self,env,returnOrderedStates = False,returnSpringState = False):
         """ 
             Implement some heuristic measures of the policy.
             Can consider last n policies by the argument "which" (default is the last one).
@@ -976,7 +976,12 @@ class actionValue(object):
         evaluation_steps = 20000
 
         # self.set_referencePolicy(which)
+        if returnOrderedStates == True:
+            orderedVisits = []
+            orderedVisitsAll =[]
+
         visitedStates = set()
+        visitedStatesTentacle = set()
         cumulativeReward = 0
         n_activeSuckers = 0
 
@@ -1016,22 +1021,52 @@ class actionValue(object):
         env.deltaT = 0.1
         env.equilibrate(1000)
         state = env.get_state()
+
+        if returnSpringState:
+            springStates = [] #this is ordered
+            springStatesALL = [] #this is ordered
+            observedSpringState = set() #unordered visits
         for k in range(evaluation_steps):
             action,encoded_state_perTentacle,encoded_state_perAgent = self.getOnPolicyAction(state,returnEncoding=True)
+            #encoded state is before integration step..
             # print(encoded_state)
             # input()
             state,r,_t=env.step(action)
+            if returnSpringState:
+                springState = env._getSpringStates() #AFTER INTEGRATION STEP
+                # print(springState)
+                if tuple(springState) not in observedSpringState:
+                    springStates.append(springState) #independent from agent definition
+                observedSpringState.add(tuple(springState))
+                # print(observedSpringState)
+                springStatesALL.append(springState)
+                # input()
             cumulativeReward += r
             if self._ganglia:
                 action = [a for al in action for a in al] #list of list --> list
             # actionMatrix = np.column_stack([actionMatrix,np.array(action)])
             n_activeSuckers += sum(action)
             for sid in encoded_state_perTentacle:
-                state_frequency[sid] +=1 
+                state_frequency[sid] +=1 #not making distinction between different ganglia..
+            if returnOrderedStates:
+                # print(encoded_state_perTentacle)
+                # input()
+                orderedVisitsAll.append(encoded_state_perTentacle)
+                if tuple(encoded_state_perTentacle) not in visitedStatesTentacle:
+                    orderedVisits.append(encoded_state_perTentacle) 
+            visitedStatesTentacle.add(tuple(encoded_state_perTentacle))
             for sid in encoded_state_perAgent:
                 visitedStates.add(sid)
+            # if k % 2000 == 0:
+            #     # print(state)
+            #     print(encoded_state_perAgent) 
+            #     print("--")
+            #     print(visitedStates) #visited by the policy, so I merge states of each agent in the hive scenario
+
+
         norm_vel = env.get_averageVel()/env.x0
-        # print("NORMALIZED CM VELOCITY = ",norm_vel)
+        
+
     # ************
 
         averageActiveSuckers = n_activeSuckers/(k+1)
@@ -1053,15 +1088,11 @@ class actionValue(object):
         weighted_actionPerState = {key:actionPerState[key] * state_frequency[key] for key in state_frequency }
         weighted_averageActivity = sum(weighted_actionPerState.values())
         
-        # print("Time average average active suckers for the policy (un-normalized and normalized):")
-        # print(averageActiveSuckers,averageActiveSuckers/self._nsuckers)
-        # print("Weighted policy measure (un-normalized and normalized)")
-        # print(weighted_averageActivity,weighted_averageActivity/self._nsuckers)
-
-        # print("number of visited states out of all possible states:")
-        # print(len(visitedStates),self.state_space_dim)
-        
-        return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates#,weighted_actionPerState
+        if returnOrderedStates:
+            return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates,orderedVisits,orderedVisitsAll
+        if returnSpringState:
+            return norm_vel,observedSpringState,springStates,springStatesALL
+        return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates
         
 
 
@@ -1112,6 +1143,11 @@ class actionValue(object):
                 state_frequency[sid] +=1 
             for sid in encoded_state_perAgent:
                 visitedStates.add(sid)
+            # if k % 2000 == 0:
+            #     print(encoded_state_perAgent)
+            #     print("--")
+            #     print(visitedStates)
+            
         norm_vel = env.get_averageVel()/env.x0
     # ************
 
@@ -1139,7 +1175,31 @@ class actionValue(object):
     ###############
     ##########
 
+    def evaluateRandomDeterministic(self,env,returnOrderedStates = False):
+        """ 
+            State frequency under random deterministic policy
+        """
 
+        #Build policy
+        if self._parallelUpdate:
+            policy = {}
+            for s in self._Q:
+                policy[s] = np.random.randint(0,self.action_space_dim)
+        else:
+            policy = []
+            for a in range(self._nAgents):
+                pol = {}
+                for s in self._Q[a]:
+                    pol[s] = np.random.randint(0,self.action_space_dim)
+                policy.append(pol)
+        self._refPolicy = policy
+        
+        # print("random deterministic policy:",policy)
+        out = self.evaluatePolicy(env,returnOrderedStates=returnOrderedStates)
+        #ripristina policy da Q matrix nel caso servisse per altre analisi
+        self._refPolicy = self.getPolicy()
+        return out
+       
     def getOnPolicyAction(self,state,returnEncoding = False):
         out_action=[]
         if self._ganglia==False:
@@ -1187,7 +1247,7 @@ class actionValue(object):
             out_action = action
         else:
             #Control center scenarion
-            encoded_state = [interpret_binary(s) for s in state] #here state index run trhough ganglia
+            encoded_state = [interpret_binary(s) for s in state] #here state index run through ganglia
             padding= int(self._nsuckers/self._nAgents)
             out_action = [make_binary(a,padding) for a in action]
         if self._parallelUpdate:

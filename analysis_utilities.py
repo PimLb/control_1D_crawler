@@ -284,7 +284,8 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
         policy = pol["policy"]
         n_ganglia = pol["ganglia"]
         isHive= pol["hive"]
-        line = '-o'
+        line = 'o'
+        
         if n_ganglia>0:
             ganglia=True
             if isHive:
@@ -314,7 +315,7 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
                 architecture = mode+"Robustness_Multiagent_%dsuckers"%n_suckers
                 color = "tab:purple"
                 plotIncrement = 1.5
-                line = '--o'
+                # line = '--o'
         print("\n\n** %s **\n"%label)
         try:
             period = pol["periodicity"]
@@ -474,7 +475,7 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
         else:
             np.savetxt("results/robustness/"+architecture+".txt",np.column_stack((out[0],np.round(out[1],4))),fmt = fmt,header=xlabel+"\tvel")
         if plot==True:
-            fig.plot(out[0],out[1],line,lw=5,label = label,color = color)
+            fig.plot(out[0],out[1],line,lw=12,label = label,color = color)
             fig.axhline(0,ls='--',c='black')
             fig.legend()
             plt.show()

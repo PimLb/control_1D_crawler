@@ -559,6 +559,17 @@ class   Environment(object):
             clustered_springs.append(springs)
 
         return clustered_springs
+    
+    def _getSpringStates(self):
+        springs = []
+        for sucker in  self._suckers[0:self._nsuckers-1]:
+                k = sucker._id
+                pright = sucker.rightNeighbor._abslutePosition
+                dright =  pright -sucker._abslutePosition
+                right_tension = sign0(dright-self.l0(self._t,k)) # 0 = negative right force --> compressed, 1= elongated
+                springs.append(right_tension)
+
+        return springs
 
     def _get_state_multiagent(self):
         '''
