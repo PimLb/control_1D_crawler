@@ -1096,7 +1096,7 @@ class actionValue(object):
         
 
 
-    def evaluateTrivialPolicy(self,env,isRandom=True):
+    def evaluateTrivialPolicy(self,env,isRandom=True,returnOrderedStates = False,returnSpringState = False):
         """ 
             State frequency under random policy
         """
@@ -1107,6 +1107,16 @@ class actionValue(object):
         else:
             print("Evaluating Null policy")
             self._getTrivialAction = self._getNullAction
+
+        if returnOrderedStates == True:
+            orderedVisits = []
+            orderedVisitsAll =[]
+            visitedStatesTentacle = set()
+
+        if returnSpringState:
+            springStates = [] #this is ordered
+            springStatesALL = [] #this is ordered
+            observedSpringState = set() #unordered visits
         # print(env.deltaT)
         evaluation_steps = 20000
 
@@ -1136,18 +1146,24 @@ class actionValue(object):
             action,encoded_state_perTentacle,encoded_state_perAgent = self._getTrivialAction(state,returnEncoding=True)
             state,r,_t=env.step(action)
             cumulativeReward += r
+            if returnSpringState:
+                springState = env._getSpringStates() #AFTER INTEGRATION STEP
+                if tuple(springState) not in observedSpringState:
+                    springStates.append(springState) #independent from agent definition
+                observedSpringState.add(tuple(springState))
+                springStatesALL.append(springState)
             if self._ganglia:
                 action = [a for al in action for a in al] #list of list --> list
             n_activeSuckers += sum(action)
             for sid in encoded_state_perTentacle:
                 state_frequency[sid] +=1 
+            if returnOrderedStates:
+                orderedVisitsAll.append(encoded_state_perTentacle)
+                if tuple(encoded_state_perTentacle) not in visitedStatesTentacle:
+                    orderedVisits.append(encoded_state_perTentacle) 
             for sid in encoded_state_perAgent:
                 visitedStates.add(sid)
-            # if k % 2000 == 0:
-            #     print(encoded_state_perAgent)
-            #     print("--")
-            #     print(visitedStates)
-            
+  
         norm_vel = env.get_averageVel()/env.x0
     # ************
 
@@ -1167,15 +1183,16 @@ class actionValue(object):
         print("number of visited states out of all possible states:")
         print(len(visitedStates),self.state_space_dim)
 
-        # print("Average active suckers (for null policy trivial, for random should tend to half?)")
-        # print(averageActiveSuckers)
+        if returnOrderedStates:
+            return norm_vel,state_frequency,averageActiveSuckers/self._nsuckers,visitedStates,orderedVisits,orderedVisitsAll
+        if returnSpringState:
+            return norm_vel,observedSpringState,springStates,springStatesALL
         
         return norm_vel,state_frequency,visitedStates
-    
     ###############
     ##########
 
-    def evaluateRandomDeterministic(self,env,returnOrderedStates = False):
+    def evaluateRandomDeterministic(self,env,returnOrderedStates = False,returnSpringState = False):
         """ 
             State frequency under random deterministic policy
         """
@@ -1195,7 +1212,7 @@ class actionValue(object):
         self._refPolicy = policy
         
         # print("random deterministic policy:",policy)
-        out = self.evaluatePolicy(env,returnOrderedStates=returnOrderedStates)
+        out = self.evaluatePolicy(env,returnOrderedStates=returnOrderedStates,returnSpringState = returnSpringState)
         #ripristina policy da Q matrix nel caso servisse per altre analisi
         self._refPolicy = self.getPolicy()
         return out
