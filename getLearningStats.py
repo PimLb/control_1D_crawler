@@ -90,8 +90,7 @@ def saveData(Q,name,getPics=True,outFolder = './'):
         footer = "Number of episodes for convergence (HIVE)= "+convInfo+"\nCurrent time "+now
         
         np.savetxt(outFolder+fileName,np.column_stack((episodes,av_values)),header="episodes\tav_value",footer=footer)
-        # if getPics:
-        #     Q.plot_av_value(saveFig=True,labelPolicyChange = True,outFolder=outFolder)
+        
     else:
             nAgents = av_values.shape[1]
             for n in range(nAgents):
@@ -123,8 +122,6 @@ if not os.path.exists(outFolderRawData):
     print("creating raw data folder")
 
 
-
-# input_fileName =  sys.argv[1]
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--infile', type=argparse.FileType('r', encoding='UTF-8'), required=True)
@@ -145,7 +142,7 @@ else:
 max_attempts = 5
 plateau_conv = inputParam.convergence
 explore_plateau = True
-# n_suckers = int(input("insert number of suckers\n"))
+
 n_suckers = inputParam.ns
 
 
@@ -179,22 +176,17 @@ if not is_Ganglia:
     
     nGanglia = 0
     if isHive ==1:
-        # isHive = True
         steps = 6000
         typename="MULTIAGENT_HIVE"
     else:
         steps = 6000
         typename="MULTIAGENT"
 else:
-    # is_Ganglia = True
     steps = 20000
-    # nGanglia=int(input("Insert number of control centers"))
     nGanglia = inputParam.nGanglia
     if isHive ==1 and nGanglia>1:
-        # isHive = True
         typename = "%dGANGLIA_HIVE"%nGanglia
     else:
-        # isHive = False
         typename = "%dGANGLIA"%nGanglia
 
 

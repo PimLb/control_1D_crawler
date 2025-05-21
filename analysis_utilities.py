@@ -59,10 +59,9 @@ def policyImporter(folder):
     print(filenames)
     directoryName = filenames[-1].split("/")[-2]
     print(directoryName)
-    # n_suckers = int(re.match("(\d+)",directoryName).group(1))
+    
     n_suckers = int(input("insert # suckers\n"))
-    # print(n_suckers)
-    # input()
+
     policies = []
     order_list = []
     for filename in filenames:
@@ -108,8 +107,6 @@ def policyImporter(folder):
         policy = np.load(filename,allow_pickle=True)
         pol["policy"] = policy
         pol["n_suckers"] = n_suckers
-        # pol={"policy":policy,"ganglia":nGanglia,"hive":isHive,"n_suckers":n_suckers}
-        # print(nGanglia,isHive)
         policies.append(pol)
     print(order_list)
     return_policies = [p for _,p in sorted(zip(order_list,policies))]
@@ -365,7 +362,6 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
                         print(ranked_averaged_devils)
                         print("1st Most important: ",ranked_averaged_devils[0])
                         
-                        # print("Plotting analysis of average most influential sucker")
                         
                     else:
                         print("\n<NEW>: asssessing sucker importance over sever runs of failures of same sucker\n")
@@ -373,17 +369,11 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
                         print(ranked_averaged_devils)
                         print("1st Most important: ",ranked_averaged_devils[0])
                     importantSuckers [label] = [ranked_averaged_devils[0]]
-                    # plt.figure()
-                    # plt.ion()
-                    # plt.title("first order importance "+label)
-                    # plt.ylim(-0.02,0.52)
-                    # plt.plot(np.arange(pdf.size),pdf,'-o',color=color,lw=2,ms=10)
-                    # pdf += plotIncrement
+
                     pdfLine = pdf.copy()
                     pdfLine +=plotIncrement
                     fig_allPdfs_lines.plot(np.arange(pdf.size),pdfLine,'-o',color=color,lw=2,ms=10,label=label)
-                    # fig_allPdfs_lines.set_ylim(-0.02,0.52)
-                    # fig_allPdfs_lines.legend()
+
                     
 
                     fig_allPdfs.bar(np.arange(pdf.size),pdf,label=label,width=width,color=color)
@@ -406,7 +396,7 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
                                 fig_allPdfs2.set_title("Sucker importance 2nd order,  periodicity = %d"%period)
                             else:
                                 fig_allPdfs2.set_title(label="sucker importance")    
-                            # print("labels",labels)
+              
                             
 
                         if not average:
@@ -431,23 +421,17 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
                             ranked_averaged_devils = np.delete(ranked_averaged_devils, np.where(ranked_averaged_devils == fixID)[0][0])
                             ranked_averaged_devils = np.insert(ranked_averaged_devils,0,fixID)
                             print("2nd order list of devils: ", ranked_averaged_devils)
-                            # input("continue ?")
+                    
                         else:
                             ranked_averaged_devils,pdf = selectRelevantSucker_average(env,policy,isHive,fixID)
                             print("2nd order list of devils: ", ranked_averaged_devils)
                             print("2nd Order Most important: ",ranked_averaged_devils[1])
-                        # plt.figure()
-                        # plt.ion()
-                        # fig2 = plt.subplot(xlabel='sucker ID', ylabel='2nd order importance')
-                        # fig2.set_title(label = label)
-                        # fig2.set_xticks(np.arange(n_suckers),labels = labels)
-                        # fig2.bar(np.arange(pdf.size),pdf)
                         
                         fig_allPdfs2.bar(np.arange(pdf.size),pdf,label=label,width=width2,color=color)
                         fig_allPdfs2.legend()
                         width2-=0.18
                         importantSuckers [label].append([ranked_averaged_devils[1]])
-            # input("continue?")
+            
             failing_suckers = []
             if randomSuckerSel:
                 max_failingSuckers = env._nsuckers+1 #all suckers
@@ -481,6 +465,8 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
             plt.show()
     input()
     return importantSuckers
+
+
 def selectRelevantSucker_average(env,policy,isHive,fixID=None,descending=False):
     """
     relevant sucker estimated making it play wrong action over several evolution steps
@@ -521,22 +507,15 @@ def selectRelevantSucker_average(env,policy,isHive,fixID=None,descending=False):
         print(suckerID,avVel)
     ids = np.argsort(vels) #sorted indices from smaller to larger velocity
     if fixID is not None:
-        # ids = np.insert(ids,0,fixID)
-        # main=ids[1]
+
         ids = np.delete(ids, np.where(ids == fixID)[0][0])
         ids = np.insert(ids,0,fixID)
-        # print(vels)
-        # input()
     else:
         pass
         # main = ids[0]
     if descending:
         ids=ids[::-1]
-    # print(ids)
-    # if np.unique(ids).size != ids.size:
-    #     print(vels)
-    #     print(ids)
-    #     input("PROBLEM")
+
     
     print(vels)
     #normalization
@@ -551,18 +530,10 @@ def selectRelevantSucker(env,onPolActions,fixID=None,descending=False):
     INPUT: environment,on policy actions
     ATTENCTION: This analysis is not precise especially when considering more than one failing sucker since cannot correlate the effect of several suckers together in this form..
     '''
-    #PROBLEM I DON'T WANT TO PERTURB original tentacle..
-    #Need to copy the object..
-    # initialEnv = copy.deepcopy(env)
-    #Need to do it for each sucker
-    # vels=[]
     
     n_suckers = env._nsuckers
     actions = onPolActions.copy()
-    # if fixID is not None:
-    #     print("original actions", onPolActions)
-    # print("########")
-    # print(actions)
+
     suckers = set([s for s in range(n_suckers)])
     vels = np.empty(len(suckers)) 
     if fixID is not None:
@@ -570,41 +541,24 @@ def selectRelevantSucker(env,onPolActions,fixID=None,descending=False):
         actions[fixID] = abs(actions[fixID]-1)
 
     refActions = actions.copy()
-    # if fixID is not None:
-    #     print(refActions)
-    #     print(suckers)
-    #     input()
-    
+
     for id in suckers:
         actions[id] = abs(actions[id]-1) #play the contrary move of what prescribed
-        # print(actions)
-        # print(env._t)
-        #state,r,_t=env._stepOverdamped(onPolActions)
         avVel=0
 
         instVel=env._stepOverdampedVIRTUAL(actions) #avoid actual update of positions and observables, returns only instanteneous velocity
         vels[id] = instVel
-        # env.render()
-        # time.sleep(0.1)
-        # vels.append(instVel)   
-        # actions = onPolActions.copy() #RESET
         actions = refActions.copy()
     
     ids = np.argsort(vels) #sorted indices from smaller to larger velocity
     if fixID is not None:
         ids = np.insert(ids,0,fixID)
         main=ids[1]
-        # print(vels)
-        # input()
     else:
         main = ids[0]
     if descending:
         ids=ids[::-1]
-    # print(ids)
-    # if np.unique(ids).size != ids.size:
-    #     print(vels)
-    #     print(ids)
-    #     input("PROBLEM")
+
     return ids,main
 
 def getAction(info,policy,state,isHive,epsilon=None):
@@ -707,9 +661,6 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
         
     print("IS HIVE =",isHive)
     
-    
-
-    # env.reset(equilibrate = True)
     env.reset()
     env.equilibrate(1000)
     state = env.get_state()
@@ -719,14 +670,11 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
     mostImportantID=[]
 
 
-        
-    # print("here",whichDevils)
     for t in trange(steps): 
         currentT.append(t)
         if not epsilonGreedyFail:
             action = getAction(env.info,policy,state,isHive) 
             #Generalize for any number of failing suckers
-            # suckers = list(np.arange(1,nsuckers-1)) #EXCLUDE BASE AND TIP
             suckers = list(np.arange(0,nsuckers))
             devil_suckers = set()
             gotDevil=False
@@ -742,12 +690,10 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
                     devil = random.choice(suckers)
                 else:
                     devil = devils[i] #here not important removal from sucker list. Index from more to less impactful
-                # print(devil)
-                # input()
+
                 if np.random.random() < (1 - epsilon):
                     pass
                 else:
-                    # action_flattened[devil] = abs(action_flattened[devil]-1) #does exaclty the contrary of what prescibed  
                     gotDevil=True
                     action[devil] =np.random.randint(0,2)
                 
@@ -756,9 +702,7 @@ def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=
                     devil_suckers.add(devil)
         else:
               action = getAction(env.info,policy,state,isHive,epsilon)
-        
-        # print(action)
-        # input()
+
         state,r,_t=env._stepOverdamped(action)
         
         
@@ -843,7 +787,7 @@ def onPolicyStateActionVisit(env,policy,isHive):
     #PLAY THE ACTION
     env.equilibrate(1000)
     state = env.get_state()
-    # print(state)
+
     # ----------------- GANGLIA SCENARIO ---------
     if env.isGanglia:
         padding= int(nsuckers/nAgents)
@@ -853,11 +797,6 @@ def onPolicyStateActionVisit(env,policy,isHive):
         for t in trange(steps): 
             encoded_state = [globals.interpret_binary(s) for s in state]
             action = []
-            # if isHive:
-                # for k in range(env._nsuckers):
-                #     #get on-policy action
-                #     action.append(policy[encoded_state[k]])
-            # else:
             for a,gind in zip(ag,gindxs):#agent,ganglion index
                 action.append(globals.make_binary(policy[a][encoded_state[gind]],padding))
             action_flattened = [a for al in action for a in al]
@@ -889,8 +828,7 @@ def onPolicyStateActionVisit(env,policy,isHive):
     #normalization
     print("Analysis over\nAVERAGE ACTIVE SUCKERS:", averageActiveSuckers)
     print("Velocity analyzed policy:",env.get_averageVel()/env.x0)
-    # print(stateFreqPerSucker)
-    # print(actionFreqPerSucker)
+
     for sF,aF in zip(stateFreqPerSucker,actionFreqPerSucker):
         sF.update((key, val/(t+1)) for key, val in sF.items())  
         aF.update((key, val/(t+1)) for key, val in aF.items())  
@@ -910,7 +848,6 @@ def plotTSvisits(actionFreq,refActionfreq=None,maxNorm = False,withNumbers = Tru
     intermediateKeys = ['->|->','<-|->','->|<-','<-|<-']
     baseKeys = ['base|<-','base|->']
     tipKeys = ['->|tip','<-|tip']
-    #colorplot y-axis 4 states x-axis sucker position 
     
     #Read plot tile from key and value from item. 
     #First I have to gather per key all suckers
@@ -924,10 +861,7 @@ def plotTSvisits(actionFreq,refActionfreq=None,maxNorm = False,withNumbers = Tru
         print("NORMALIZING WITH REFERENCE..")
         for k in keys:
             freqPerSucker = []
-            # print(k)
             for ns in range(nsuckers):
-                # print(actionFreq[ns][k],refActionfreq[ns][k])
-                # if refActionfreq[ns][k] !=0:
                 if actionFreq[ns][k]==0:
                     freqPerSucker.append(0)
                 else:
@@ -935,56 +869,38 @@ def plotTSvisits(actionFreq,refActionfreq=None,maxNorm = False,withNumbers = Tru
                         freqPerSucker.append(actionFreq[ns][k]/refActionfreq[ns][k])
                     except ZeroDivisionError:
                         freqPerSucker.append(np.inf)
-                    #     print(actionFreq[ns][k],refActionfreq[ns][k])
-                    #     exit()
-                # else:
-                    # freqPerSucker.append(actionFreq[ns][k])
-            # print(freqPerSucker)
             tentacleState[k] = np.array(freqPerSucker)
     else:
         for k in keys:
             freqPerSucker = []
-            # print(k)
             for ns in range(nsuckers):
                 freqPerSucker.append(actionFreq[ns][k])
-            # print(freqPerSucker)
             tentacleState[k] = np.array(freqPerSucker)
-    # print(tentacleState)
-    
-    #prepare what I plot--> combine base|<- with <-|<-  with <-|tip ecc..
-    # stateKeys = set(['->|<-','<-|->','base|<- <-|<- <-|tip', 'base|-> ->|-> ->|tip'])
-    # stateKeys = {'->|<-':0,'<-|->':1,'<-|<-':2, '->|->':3}
     
     tentacleState['<-|<-'] = tentacleState['base|<-'] + tentacleState['<-|<-'] + tentacleState['<-|tip']
     tentacleState['->|->'] = tentacleState['base|->'] + tentacleState['->|->'] + tentacleState['->|tip']
     for k in baseKeys + tipKeys:
         del tentacleState[k]
         keys.remove(k)
-    # print(tentacleState)
-    # print(np.array([tentacleState[k] for k in tentacleState]))
-    
+
     plt.figure()
     fig = plt.subplot(xlabel='sucker', ylabel='')
     fig.set_yticks([0,1,2,3],list(keys))
     fig.set_xticks(list(np.arange(0,nsuckers)),['base']+list(np.arange(2,nsuckers))+['tip'])
-    # fig.set_xlim([-1,nsuckers+1])
-    # fig.set_ylim([-1,4])
+
     plt.ion()
     plt.show()
     # X,Y = np.meshgrid(np.arange(0,nsuckers),stateKeys.items())
     Z = np.array([tentacleState[k] for k in tentacleState])
     print(Z)
-    # if refActionfreq is not None:
-    #     Znorm = np.round(Z,2)
-    # else:
+
     if maxNorm:
         Zmax = np.nanmax(Z[np.abs(Z) != np.inf])
         Znorm = np.round(Z/Zmax,2)
         print(Zmax)
     else:
         Znorm = np.round(Z,2)
-    # print(Z[2])
-    # fig.pcolor(X, Y, Z)
+
     img =fig.imshow(Z,cmap="viridis",vmin=0,vmax=vmax)
     if withNumbers:
         for i in range(len(keys)):
@@ -1015,22 +931,20 @@ def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
     if is_ganglia==False:
         if isHive:
             n_states = len(policy)
-            # actionPerState = np.empty(n_states) #each policy in one action, then it should be multiplied by the number of suckers
+            
             for s,a_ind in policy.items():
                 if s in internalStates:
                     actionPerState[s] =  (n_suckers-2)*a_ind
                 else:
                     actionPerState[s] = a_ind
         else:
-            #use same map of hive {'->|<-':0,'->|->':1,'->|tip':6,'<-|<-':2,'<-|->':3,'<-|tip':7,'base|<-':4,'base|->':5}
-            # actionPerState = np.zeros(8)
             for pol in policy:
                 for s,a_ind in pol.items():
                     if s in actionPerState:
                         actionPerState[s] += a_ind #a_ind is just 1 or 0 for each agent
                     else:
                         actionPerState[s] = a_ind
-            # actionPerState = dict(functools.reduce(operator.add,map(collections.Counter, actionPerState)))
+        
 
     else:
         padding= int(n_suckers/nAgents)
@@ -1046,8 +960,6 @@ def actionMapState_dict(policy,is_ganglia,isHive,n_suckers,nAgents):
                         actionPerState[s]+= sum(globals.make_binary(a_ind,padding))
                     else:
                         actionPerState[s]= sum(globals.make_binary(a_ind,padding))
-            
-            # actionPerState = dict(functools.reduce(operator.add,map(collections.Counter, actionPerState)))
 
     return actionPerState
 
@@ -1075,17 +987,13 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
         else:
             type = "%dGANGLIA"%nAgents
             
-    # print("out file name:")
     fileName = outFolder+"Raw_policyMeasuresFor%dsuckers_omega%.2f_%s"%(Q._nsuckers,env.omega,type)
     
-
-    # print(fileName)
-    # input()
 
     #first establish baseline of the random policy (or the null one)
     # print("Random Policy ANalysis")
     state_freqRandom,visitedRandom = Q.evaluateTrivialPolicy(env)
-    # print("visited states:",visitedStates)
+
     #Loop trough last n learned policies to gather stats
 
     #performance measure
@@ -1102,8 +1010,7 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     for pol_n in range(1,nLastPolicies+1):
         polIndx.append(c)
         value.append(Q.set_referencePolicy(pol_n))
-        # print("")
-       
+   
         #below the policy is evaluated
         vel,state_freq,norm_activeSuckers,visited = Q.evaluatePolicy(env)
         norm_vels.append(vel)
@@ -1123,10 +1030,7 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     stdSorted = np.std(sorted_norm_vels[0:int(nLastPolicies/2)])
 
     sortedIndexes = np.argsort(norm_vels)[::-1]
-    # print(sorted_norm_vels)
-    # print(sortedIndexes)
-    # print("--")
-    # print(sorted_norm_vels[0:int(nLastPolicies/2)])
+ 
     bestPolIndexes = sortedIndexes[0:int(nLastPolicies/2)]
     #NEW COUNT NUMBER OF DISTINT POLICIES EXPLORED AMONG ALL AND AMONG THE BEST 250
     policies = np.array(Q._lastPolicies)[::-1] #[::-1]Correction for how policies are organized. 
@@ -1139,21 +1043,11 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     else:
         policyDistribution,uniquePolicies = countPolicies(policies,Q._parallelUpdate,distributed=distributed)
     npoliciesUnique = len(policyDistribution)
-    # if savePolicies:
-    #     policyDistributionBest,uniquePoliciesBest,pp = countPolicies(policies[bestPolIndexes],Q._parallelUpdate,returnPolicies = True)
-    #     fileName2 = outFolder+"AllBestPolicies_%s"%(type)+".npy"
-    #     np.save(fileName2,pp)
+
     
     policyDistributionBest,uniquePoliciesBest = countPolicies(policies[bestPolIndexes],Q._parallelUpdate,distributed=distributed)
     npoliciesBest = len(policyDistributionBest)
 
-    ###### TODO: I want to build a curve with frequency of each unique policy. 
-    # I order them from most to less frequent and want to analyse velocity of those unique policies
-    # Observation: to recompute velocities  is not computationally efficient. I could compute them here and renormalize with counts..
-    # policyDistribution = np.sort(countMatrix)[::-1]
-    # index = np.argsort(countMatrix)[::-1]
-    #reordering from most to less frequent
-    # uniquePolicies = uniquePolicies[index]
     normVelUnique = []
     print("Analysing unique policies")
 
@@ -1179,14 +1073,13 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     # For instance if all unique policies are less than 250, I recover same average as before
     #the previous calculation included redudancies
 
-    # print(policyDistributionRanked*nLastPolicies)
+
     multiplicity = np.cumsum(numberOfReplicas)
-    # print(multiplicity)
-    # print(np.where(multiplicity>=int(nLastPolicies/2)))
     indx = np.where(multiplicity>=(nLastPolicies/2))[0][0] + 1 #first index to enter array, second to take first index after which condition true
     policyDistributionBest = numberOfReplicas[0:indx]/np.sum(numberOfReplicas[0:indx]) #need to renormalize accordingly
     averageFromUniqueBest = np.sum(normVelUniqueRanked[0:indx]*policyDistributionBest)
     stdFromUniqueBest = np.sqrt(np.sum(np.power(normVelUniqueRanked[0:indx],2)*policyDistributionBest) - averageFromUniqueBest**2)
+   
     #now is actually more correct. Indeed why truncate a policy in the weighted average? 
      #for instance if best pol has multeplicity 1 and second best 350, second best should still be weighted accordingly
     
@@ -1194,11 +1087,8 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     print("average best vel (IMPROVED CALCULATION) = %.4f+- %.4f; number of distint best unique pol = %d  \n******\n"%(averageFromUniqueBest,stdFromUniqueBest,indx)) 
     indx = indx-1 # to recover correct location (I putted +1 for slicing simplicity)
     if  multiplicity[indx]> int(nLastPolicies/2) :
-        # print(numberOfReplicas[0:indx+1])
-        # print(numberOfReplicas[indx])
         numberOfReplicas[indx] = int(nLastPolicies/2)-np.sum(numberOfReplicas[0:indx])
         #alternative numberOfReplicas[indx] = int(nLastPolicies/2)- multiplicity[indx-1]
-        # print(numberOfReplicas[indx])
         policyDistributionBest = numberOfReplicas[0:indx]/np.sum(numberOfReplicas[0:indx]) 
         averageFromUniqueBest = np.sum(normVelUniqueRanked[0:indx]*policyDistributionBest)
         stdFromUniqueBest = np.sqrt(np.sum(np.power(normVelUniqueRanked[0:indx],2)*policyDistributionBest) - averageFromUniqueBest**2)
@@ -1242,7 +1132,7 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     activeS = np.array(activeS)
     visitedStates = np.array(visitedStates)
     value = np.array(value)
-    # print(value)
+
     if value.ndim>1:
         value = np.sum(value,axis=1) #total value for all agents
     #INFO:x0=%.3f, tLengthavailable states/all possible:%d/%d\n %(visitedStates,Q.state_space_dim
@@ -1250,7 +1140,7 @@ def getPolicyStats(Q,env,nLastPolicies = 100,runtimeInfo=None,outFolder="./",inf
     paramInfo = 'Convergence criterion (tollerance) = %.3f\nPlateau exploration parameters: lr = %.4f\tepsilon =%.3f\tsteps = %d\n'%(info['convergence'],info['lr'],info['eps'],info['steps'])
     polInfo = "Visited states under random_policy:%d/%d\nindx\tnorm vel\tactiveSts[%%]\tvisitedStates\tTotal av_value"%(len(visitedRandom),Q.state_space_dim)
     header = tentacleInfo + paramInfo + polInfo
-    # now = datetime.now().ctime()
+
     if runtimeInfo is not None:
         footer = "runtime for training: "+runtimeInfo+"\nCurrent time: "+now
     else:
@@ -1293,9 +1183,7 @@ def countPolicies(policies,isHive,returnPolicies = False,distributed = False):
     pol = np.array(pol)
     _unique,indx,countsIdentical = np.unique(pol_values,axis=axis,return_counts = True,return_index=True) # counts is an array that tells you for any elements how many times
     uniquePol = pol[indx]
-    # countDifferent = len(countsIdentical) #since counts identical is an array indicating at each position number of identical columns or rows in the unique matrix
-    # pol = list(pol)
-    # uniquePol = list(uniquePol)
+
     index = np.argsort(countsIdentical)[::-1]
     #reordering from most to less frequent
     uniquePol = uniquePol[index]
@@ -1311,7 +1199,6 @@ def countPolicies(policies,isHive,returnPolicies = False,distributed = False):
         return policyDistribution,uniquePol,pol
     else:
         return policyDistribution,uniquePol
-    # return counter,counterIndicized
 
 ################
 # TOOLS FOR ANALYSIS OF TIME AND SPACE (AUTO)CORRELATION OF THE ACTION MATRIX
@@ -1322,7 +1209,7 @@ def timeCorrelation(A,sucker_index):
     print(average)
     time_steps = A.shape[1]
     print(time_steps)
-    #
+    
     C = np.empty(time_steps)
     for t1 in range(time_steps):
         for t in range(time_steps-t1):
@@ -1335,135 +1222,12 @@ def twoSuckerCorrelation(A,sucker_index):
     time_steps = A.shape[0]
     C = np.empty(n_suckers)
     average = np.average(A[sucker_index]) #average over all suckers.. Is that correct?
-    # print(average)
-    # suckers = set(np.arange(n_suckers))
-    # suckers.remove(sucker_index) #all other suckers
-    # print(suckers)
+
     for i1 in range(n_suckers):
         C[i1] = np.average(A[i1,:] * A[sucker_index,:])
-    # print(C)
     C = C/(average*average)
-    # print(C)
+
     return C
 
 
 
-
-
-
-##################
-#def actionMapState(policy,is_multiAgent,isHive,n_suckers,nAgents):
-#     '''
-#     NOT sure of the interpretation, but it could be a compact number to assign to a policy?
-#     In principle this is knowable a priori.. A given policy corresponds to a fixed amount of actions for each given state..
-#     Since I see this as a per tentacle property, I return the overall active suckers per state for the given policy. 
-#     De facto I'm mapping not hive into hive doing so in terms of action population..
-#     '''
-#     #for not hive give one actionPerState vector for each agent!
-#     if is_multiAgent:
-#         if isHive:
-#             n_states = len(policy)
-#             actionPerState = np.empty(n_states) #each policy represents one action, then EXCLUDING TIP AND  BASE it should be multiplied by the number of suckers
-#             for s,a_ind in enumerate(policy[0:4]):
-#                 actionPerState[s] =  (n_suckers-2)*a_ind
-#             for s,a_ind in enumerate(policy[4:]):
-#                 actionPerState[s] =  a_ind
-#         else:
-#             #use same map of hive {'->|<-':0,'->|->':1,'->|tip':6,'<-|<-':2,'<-|->':3,'<-|tip':7,'base|<-':4,'base|->':5}
-#             actionPerState = np.zeros(8)
-#             for pol in policy[1:n_suckers-1]:
-#                 n_states = len(pol)
-#                 aPs = np.empty(n_states)
-#                 for s,a_ind in enumerate(pol):
-#                     aPs[s] =  a_ind
-#                 actionPerState[0:4] += aPs
-            
-#             aPs = np.empty(2)
-#             for s,a_ind in enumerate(policy[0]):
-#                 aPs[s] =  a_ind
-#             actionPerState[4] = aPs[0]
-#             actionPerState[5] = aPs[1]
-#             for s,a_ind in enumerate(policy[n_suckers-1]):
-#                 aPs[s] =  a_ind
-#             actionPerState[6] = aPs[0]
-#             actionPerState[7] = aPs[1]
-#     else:
-#         padding= int(n_suckers/nAgents)
-#         if isHive:
-#             n_states = len(policy)
-#             actionPerState = np.empty(n_states)
-#             for s,a_ind in enumerate(policy):
-#                 actionPerState[s]= nAgents*sum(globals.make_binary(a_ind,padding))
-#         else:
-#             n_states = len(policy[0])
-#             actionPerState = np.zeros(n_states)
-#             for pol in policy:
-#                 aPs = np.empty(n_states)
-#                 for s,a_ind in enumerate(pol):
-#                     aPs[s]= sum(globals.make_binary(a_ind,padding))
-#                 actionPerState+=aPs
-
-#     return actionPerState
-
-# def convertPolicy(policy,env,hiveUpdate,nGanglia_out =1):
-#     """
-#     Converts a multi agent policy into a CC one. Being multiagent policy always a subset of CC ones.
-
-#     """
-#     # learning_space = env.info["learning space"]
-#     # n_states = learning_space[0]
-#     # n_actions = learning_space[1]
-    
-#     nsuckers = env.info["n suckers"]
-#     is_multiAgent = env.info["multiagent"]
-#     action_on = 2**nsuckers #all on
-#     if is_multiAgent ==False:
-#         print("nothing to do")
-#         return
-#     #First parse policies in base, tip and internal ones
-
-#     ganglia_policy = np.empty(nsuckers-1) #all combinations of the above
-#     if hiveUpdate ==True:
-#         #not interested in base and tip, all info from internal
-#         # base_pol = policy[4,5]  #compressed, elongated-->first position is compressed =0,second posiiton is 1
-#         # tip_pol = policy[5,6]   #compressed, elongated
-#         internal_suck_pol = policy[0:4] #onl
-#     else:
-#         #no hive
-#         base_pol = policy[0]
-#         # tip_pol = policy[-1]
-#         internal_suck_pol = policy[1:nsuckers-1]
-#         # for i in range(nsuckers-1):
-        #     spring_
-
-
-    #COMPLICATED for hive
-    #e.g state ('->|<-') [comp,comp] = (...,0,1,..) all shifts of this spring states and for each pos action corresponding according to given pol
-   
-   #not hive
-   
-
-
-
-
-
-
-    # for n_suckers in ns:
-    #  ...:     print()
-    #  ...:     env = Environment(n_suckers,sim_shape,t_position, carrierMode = 1,omega =omega,isOverdamped=True)
-    #  ...:     env.deltaT = 0.1
-    #  ...:     env.equilibrate(1000)
-    #  ...:     #state = env.get_state()
-    #  ...:     #Q =actionValue((env.state_space,env.action_space),nAgents=env._nagents,total_episodes=episodes,hiveUpdate=True)
-    #  ...:     #Q._Q = Q_optimum_finite
-    #  ...:     for k in range(10000):
-    #  ...:         nss,ids = optimum_impulse(env._t,env.omega,env.N,env._nsuckers)
-    #  ...:         #action = Q.get_onPolicy_action(state)
-    #  ...:         action = [0] * n_suckers
-    #  ...:         for s in ids:
-    #  ...:             action[s]=1
-    #  ...:         state,reward,terminal=env.step(action)
-    #  ...:     print("\n** average vel = ",env.get_averageVel())
-    #  ...:     norm_vel = env.get_averageVel()/env.x0
-    #  ...:     print(norm_vel)
-    #  ...:     vel_semiAnal.append(norm_vel)
