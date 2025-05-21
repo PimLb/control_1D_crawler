@@ -170,7 +170,8 @@ n_episodesPlateau = inputParam.polExplEpisodes
 isHive = inputParam.isHive
 
 
-# In the following the initial steps per episode are fixed 
+# In the following the "DEFAULT STEPS" per episode are fixed. This are used to fix the steps increment when convergence is not reached.
+#For a maximum of "max_attempts"
 
 if not is_Ganglia:
     print("Each sucker is an agent")
@@ -217,6 +218,8 @@ Q =actionValue(env.info,max_episodes=max_episodes,hiveUpdate=isHive,min_epsilon 
 
 elapsed_time=[]
 default_steps = steps
+
+# In the following the INITIAL STEPS PER EPISODE are fixed 
 
 if is_Ganglia:
     if nGanglia ==1 :
