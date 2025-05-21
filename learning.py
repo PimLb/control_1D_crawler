@@ -1,26 +1,14 @@
-
 from globals import *
 # import numpy as np
 import analysis_utilities
 
 
 
-
-#good parameters multiagents:
-max_lr = 0.1# was 0.3 learning rate
+max_lr = 0.1# Learning Rate at start of scheduling
 # was 0.05 then 0.01, for hive 0.0025
-gamma = 0.999#discount 0.9 to reflect upon..
-max_epsilon = 0.9
+gamma = 0.999 # Discount Factor
+max_epsilon = 0.9 # Epsilon Greedy parameter at start of scheduling
 
-
-
-
-#good parameters ganglia:
-# max_lr = 0.1# was 0.3 learning rate
-# min_lr = 0.01# was 0.05 then 0.01, for hive 0.0025
-# gamma = 0.999#discount 0.9 to reflect upon..
-# max_epsilon = 0.9
-# min_epsilon =0.01
 
 stateName =['->|<-','->|->','->|tip','<-|<-','<-|->','<-|tip','base|<-','base|->']
 stateMap_base = {('base',0):'base|<-',('base',1):'base|->'}
@@ -28,7 +16,6 @@ stateMap_tip = {(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
 stateMap_intermediate = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->'}
 actionState=[' not anchoring',' anchoring']
 
-# stateIndexMap = {'->|<-':0,'->|->':1,'->|tip':6,'<-|<-':2,'<-|->':3,'<-|tip':7,'base|<-':4,'base|->':5}
 
 class actionValue(object):
     def __init__(self,info:dict,max_episodes=1500,hiveUpdate = True, singleActionConstraint = False,adaptiveScheduling=False,scheduling_episodes=1000,min_epsilon =0.001,min_lr = 0.001,plateau_conv=0.01) -> None:
@@ -75,9 +62,8 @@ class actionValue(object):
         if isGanglia ==False:
             self._singleActionConstraint = False
             self._ganglia = False
-            self._nAgents = self._nsuckers #IMPORTANT
+            self._nAgents = self._nsuckers 
 
-            # self.get_onPolicy_action = self._get_onPolicy_action_multiagent
             self.updateObs = self._updateObsSuckerAgent
             self._value =[] #this observable too messy and unreadable for ganglia. So I have it only for sucker based agents
             
@@ -88,11 +74,10 @@ class actionValue(object):
                 self.update = self._update_Q_parallel
                 self.get_action = self._get_action_hive
                 Q={}
-                #k could be whatsover even directly the tuple of states
                 #   --> Can drop the interpreter but need a function producing all possible states
                 
                 stateSpace_all = stateMap_intermediate|stateMap_base|stateMap_tip
-                # print(stateSpace_all)
+             
                 for k in stateSpace_all.values():
                     Q[k] = np.random.random(self.action_space_dim)
                 # Q = np.random.random(self.dim)
@@ -154,22 +139,18 @@ class actionValue(object):
 
             self._nAgents = nGanglia
             self.updateObs = self._updateObsGanglia
-            # self.get_onPolicy_action = self._get_onPolicy_action_ganglia
-            # self.makeGreedy = self._makeGreedy_ganglia
+ 
             print("\n*++++++++++ Control Center (Ganglia) mode ++++++++++++++\n")
             print("Number of Ganglia = ", self._nAgents)
             print("Number of springs per ganglion considered: %d, corresponding to %d states"%((self._nsuckers)/self._nAgents-1,self.state_space_dim))
 
-            
-            # print("Contstrain one suction at a time (constrained policy)= ",singleActionConstraint)
             suckers_perGanglion = int(self._nsuckers/nGanglia)
             
             if nGanglia>1 and hiveUpdate: #nGanglia>1 checked only to not print useless warning message
                 self.epsilon = max_epsilon
                 print("\n** <WARNING>: HIVE UPDATE **\n")
                 self._parallelUpdate = True
-                # self.get_value = self._get_value_hive
-                # self.get_av_value = self._get_av_value_hive
+ 
                 if singleActionConstraint:
                     print("\n** <WARNING>: CONSTRAINING POLICY TO 1 ANCHORING PER GANGLION AT A TIME **\n")
                     self._singleActionConstraint = True
@@ -188,14 +169,9 @@ class actionValue(object):
                 self._oldQ = copy.deepcopy(Q)
                 
                 
-                # self._av_value.append(self.get_av_value())
-                
-                # self.plot_av_value = self._plot_av_value_ganglia_hive
                 
             else:
                 self._parallelUpdate = False
-                # self.get_value = self._get_value
-                # self.get_av_value = self._get_av_value
                 
                 
                 if singleActionConstraint:
@@ -217,9 +193,6 @@ class actionValue(object):
                     #1 Q matrix per control center (ganglia)
                     self._Q.append(copy.deepcopy(Q))
                     self._oldQ.append(copy.deepcopy(Q))
-                    
-                
-                # self._av_value.append(self.get_av_value())
                 
                 self.plot_av_value = self._plot_av_value_ganglia
                 
@@ -249,7 +222,6 @@ class actionValue(object):
             self.get_av_value = self._get_av_value
             self.plot_convergence = self._plot_convergence_noHive
             
-            #NEW container with agents to be updated
             # in the multiagent scenario I have in principle one epsilon per Q matrix
             # So far lr identical for all
             self._agentUpdateSet = set([a for a in range(self._nAgents)])
@@ -288,20 +260,6 @@ class actionValue(object):
         self._lastPolicies = self._lastPolicies[-keep:] + [self.getPolicy()]
    
     
-    # def _get_index(self,state,action=0):
-    #     # if self._multiAgent:
-    #         #here action is a scalar and state a 2 elements list. 
-    #         # I need to consider dummy action argument, when I need only state
-    #         #i = interpret_binary(state)
-    #     i = interpret_thernary(state)
-    #     j = action
-    #     # else:
-    #     #     #to check..
-    #     #     # i = interpret_binary(state)
-    #     #     i = interpret_thernary(state)
-    #     #     j = interpret_binary(action)
-            
-    #     return i,j
     def _update_Q_parallel(self,newstate,state,action,reward):
         '''
         Update the Q function, return new action.
@@ -310,14 +268,10 @@ class actionValue(object):
         have been defined
         '''
         for  k in range(self._nAgents):
-            # s_new,_a_new = self._get_index(newstate[k]) 
-            # s_old,a_old = self._get_index(oldstate[k],action[k])
+
             old_state = state[k]
-            # print(old_state)
             old_action = action[k]
-            # print(old_action)
             new_state = newstate[k]
-            # print(new_state)
             self._Q[old_state][old_action] += self.lr* (reward + gamma * np.amax(self._Q[new_state]) - self._Q[old_state][old_action])
 
         
@@ -329,8 +283,7 @@ class actionValue(object):
         '''
         #update each agent Q
         for  k in self._agentUpdateSet:
-            # s_new,_a_new = self._get_index(newstate[k]) 
-            # s_old,a_old = self._get_index(oldstate[k],action[k])Q.
+
             old_state = state[k]
             old_action = action[k]
             new_state = newstate[k]
@@ -350,8 +303,7 @@ class actionValue(object):
         action_indexes = [interpret_binary(a) for a in action] # need to get back to correct indexing
         encoded_newstate = [interpret_binary(s) for s in newstate]
         encoded_oldstate = [interpret_binary(s) for s in state]
-        # print(encoded_newstate)
-        # print(encoded_oldstate)
+
         self._update_Q_single(encoded_newstate,encoded_oldstate,action_indexes,reward)
     
     def _update_Q_ganglia_hive(self,newstate,state,action,reward):
@@ -361,8 +313,7 @@ class actionValue(object):
         action_indexes = [interpret_binary(a) for a in action] # need to get back to correct indexing
         encoded_newstate = [interpret_binary(s) for s in newstate]
         encoded_oldstate = [interpret_binary(s) for s in state]
-        # print(encoded_newstate)
-        # print(encoded_oldstate)
+
         self._update_Q_parallel(encoded_newstate,encoded_oldstate,action_indexes,reward)
         
     def _update_Q_ganglia_constrained(self,newstate,state,action,reward):
@@ -372,7 +323,7 @@ class actionValue(object):
                 action_indexes.append(self._nsuckers-action[i].index(1))
             except ValueError:
                 action_indexes.append(0)
-        # print(action_indexes)
+
         encoded_newstate = [interpret_binary(s) for s in newstate]
         encoded_oldstate = [interpret_binary(s) for s in state]
         self._update_Q_single(encoded_newstate,encoded_oldstate,action_indexes,reward)
@@ -384,7 +335,7 @@ class actionValue(object):
                 action_indexes.append(self._nsuckers-action[i].index(1))
             except ValueError:
                 action_indexes.append(0)
-        # print(action_indexes)
+
         encoded_newstate = [interpret_binary(s) for s in newstate]
         encoded_oldstate = [interpret_binary(s) for s in state]
         self._update_Q_parallel(encoded_newstate,encoded_oldstate,action_indexes,reward)
@@ -591,44 +542,6 @@ class actionValue(object):
         
         return (isConv,isMax)
 
-        
-    # def _get_onPolicy_action_multiagent(self,state):
-    #     new_action = []
-    #     # if self._multiAgent:
-    #     if self._parallelUpdate:
-    #         for k in range(self._nAgents):
-    #             # sind,_a = self._get_index(s[k])
-    #             # print(s[k],sind)
-    #             new_action.append(np.argmax(self._Q[state[k]]))
-    #     else:
-    #         #one Q function for each agent
-    #         for k in range(self._nAgents):
-    #             # sind,_a = self._get_index(s[k])
-    #             new_action.append(np.argmax(self._Q[k][state[k]]))
-        
-    #     return new_action
-    
-    # def _get_onPolicy_action_ganglia(self,state):
-    #     encoded_state = [interpret_binary(s) for s in state]
-    #     new_action = []
-    #     if self._parallelUpdate:
-    #         if self._singleActionConstraint:
-    #             for k in range(self._nAgents):
-    #                 new_action.append(make_binary(int(2**(np.argmax(self._Q[encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
-    #         else:
-    #             for k in range(self._nAgents):
-    #                     new_action.append(make_binary(np.argmax(self._Q[encoded_state[k]]),int(self._nsuckers/self._nAgents)))
-    #     else:
-    #         if self._singleActionConstraint:
-    #             for k in range(self._nAgents):
-    #                 new_action.append(make_binary(int(2**(np.argmax(self._Q[k][encoded_state[k]])-1.)),int(self._nsuckers/self._nAgents)))
-    #         else:
-    #             for k in range(self._nAgents):
-    #                     # sind,_a = self._get_index(s[k])
-    #                     # print(s[k],sind)
-    #                     new_action.append(make_binary(np.argmax(self._Q[k][encoded_state[k]]),int(self._nsuckers/self._nAgents)))
-    #     return new_action
-    
 
         
     def _get_diff_hive(self):
@@ -694,8 +607,7 @@ class actionValue(object):
         #note that for multiagent I'm looping through dictionary keys, while for ganglia through indices
         
         # policy_vector =[] #policy is a vector of dimension #states
-        
-        
+
         # if I have more than one Q matrix there is one policy per matrix
         if self._parallelUpdate :
             policy = {}
@@ -870,6 +782,8 @@ class actionValue(object):
                         color = next(clrs)
                 self._fig_av_value.scatter(episodes[-t],avValue[-t],c=color,s=15)
         plt.pause(1)
+
+
     def _plot_av_value_ganglia(self,labelPolicyChange=False,saveFig=False,outFolder = './'):
         for n in range(self._nAgents):
             plt.figure()
@@ -901,22 +815,6 @@ class actionValue(object):
             if saveFig:
                 name = "avValue%dSuckers_%dGanglia_agent%d.pdf"%(self._nsuckers,self._nAgents,n)
                 plt.savefig(outFolder+name)
-    
-    # def _plot_av_value_ganglia_hive(self,labelPolicyChange=False):
-    #     plt.figure()
-    #     self._fig_av_value = plt.subplot(xlabel='episode', ylabel='average_value')
-    #     self._fig_av_value.set_title(label='Average value (hive) learning')
-    #     episodes = [e for e in range(self.n_episodes+1)]
-    #     self._fig_av_value.plot(episodes,self._av_value,c='black')
-    #     if labelPolicyChange:
-    #         prop_cycle = plt.rcParams['axes.prop_cycle']
-    #         colors = prop_cycle.by_key()['color']
-    #         clrs= itertools.cycle(colors)
-    #         for t in range(1,len(self._lastPolicies)):
-    #             difference =np.sum(np.array(self._lastPolicies[-t-1])-np.array(self._lastPolicies[-t]))
-    #             if difference != 0 :
-    #                 color = next(clrs)
-    #             self._fig_av_value.scatter(episodes[-t],self._av_value[-t],c=color,s=15)
 
     def _plot_convergence_hive(self):
         plt.figure()
@@ -956,9 +854,6 @@ class actionValue(object):
                 action = [a for al in action for a in al] #list of list --> list
             actionMatrix = np.column_stack([actionMatrix,np.array(action)])
 
-        #just a check
-        # print("average normalized velocity = ",env.get_averageVel()/env.x0)
-
         return actionMatrix
 
     def evaluatePolicy(self,env,returnOrderedStates = False,returnSpringState = False):
@@ -993,27 +888,13 @@ class actionValue(object):
             # if self._parallelUpdate:
             for k in stateName:
                 state_frequency[k]=0
-            # else:
-            #     for a in range(self._nAgents):
-            #         for k in stateName:
-            #             state_frequency[(a,k)]=0
+
         else:
-            # print("CONTROL CENTER")
-        # if self._parallelUpdate:
             for k in range(self.state_space_dim):
                 state_frequency[k]=0
-            # else:
-            #     for a in range(self._nAgents):
-            #         for k in range(self.state_space_dim):
-            #             state_frequency[(a,k)]=0
-        
-        # print(state_frequency)
-        # print("-----")
-        # state_frequency = np.zeros(n_states)
-        actionPerState = analysis_utilities.actionMapState_dict(self._refPolicy,self._ganglia,self._parallelUpdate,self._nsuckers,self._nAgents)
-        # print("Active sucker per state for the given policy with multiplicity (for many agents)")
-        # print(actionPerState)
 
+ 
+        actionPerState = analysis_utilities.actionMapState_dict(self._refPolicy,self._ganglia,self._parallelUpdate,self._nsuckers,self._nAgents)
 
 
         # ******** LOOP TO GATHER STATS **********
@@ -1028,9 +909,6 @@ class actionValue(object):
             observedSpringState = set() #unordered visits
         for k in range(evaluation_steps):
             action,encoded_state_perTentacle,encoded_state_perAgent = self.getOnPolicyAction(state,returnEncoding=True)
-            #encoded state is before integration step..
-            # print(encoded_state)
-            # input()
             state,r,_t=env.step(action)
             if returnSpringState:
                 springState = env._getSpringStates() #AFTER INTEGRATION STEP
@@ -1040,29 +918,22 @@ class actionValue(object):
                 observedSpringState.add(tuple(springState))
                 # print(observedSpringState)
                 springStatesALL.append(springState)
-                # input()
+             
             cumulativeReward += r
             if self._ganglia:
                 action = [a for al in action for a in al] #list of list --> list
-            # actionMatrix = np.column_stack([actionMatrix,np.array(action)])
+          
             n_activeSuckers += sum(action)
             for sid in encoded_state_perTentacle:
                 state_frequency[sid] +=1 #not making distinction between different ganglia..
             if returnOrderedStates:
-                # print(encoded_state_perTentacle)
-                # input()
+
                 orderedVisitsAll.append(encoded_state_perTentacle)
                 if tuple(encoded_state_perTentacle) not in visitedStatesTentacle:
                     orderedVisits.append(encoded_state_perTentacle) 
             visitedStatesTentacle.add(tuple(encoded_state_perTentacle))
             for sid in encoded_state_perAgent:
                 visitedStates.add(sid)
-            # if k % 2000 == 0:
-            #     # print(state)
-            #     print(encoded_state_perAgent) 
-            #     print("--")
-            #     print(visitedStates) #visited by the policy, so I merge states of each agent in the hive scenario
-
 
         norm_vel = env.get_averageVel()/env.x0
         
@@ -1073,7 +944,7 @@ class actionValue(object):
         # state_frequency = state_frequency/((k+1))
         #NORMALIZATION
         state_frequency.update((key, val/(k+1)) for key, val in state_frequency.items())
-        # print(state_frequency)
+
         if self._ganglia==False:
             #need to correct for counting several time state for each agent (state here is still a property of each sucker)
             for s in stateMap_intermediate.values():
@@ -1082,8 +953,7 @@ class actionValue(object):
             #here state is a ganglion state with the multiplicity of the number of ganglion (one state per ganglion)
             state_frequency.update((key, val/self._nAgents) for key, val in state_frequency.items())
             # state_frequency = state_frequency/self._nAgents
-        # print("frequency state visits:")
-        # print(state_frequency)
+
 
         weighted_actionPerState = {key:actionPerState[key] * state_frequency[key] for key in state_frequency }
         weighted_averageActivity = sum(weighted_actionPerState.values())
@@ -1301,9 +1171,6 @@ class actionValue(object):
         '''
         Set by hand the default policy
         '''
-        # if self._parallelUpdate:
-        #     policy = policy.items()
-        #     print(policy)
         self._refPolicy = policy
 
     def test(self,env,policy,steps = 10000,doMovie=True):

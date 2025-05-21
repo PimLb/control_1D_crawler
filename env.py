@@ -1,38 +1,8 @@
 from globals import *
 
-# import pygame
-# import numpy as np
-
 state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}
 action_space_name = {1:'anchoring', 0:'not anchoring'}
 np.seterr(invalid='ignore')
-# import math
-# import random
-#CODES TODO:
-# Think about optimizing ifs 
-# EASY WAY: eliminate boundary conditions
-# Drop storage of some quantities, especially when getting to more complex situations (2d, multi-tentacle ecc)
-# --> nice: Avoid ifs by selecting a function at once (like overdamped or not, for instance)
-
-#IMPORTANT TO DO:
-# Plot action pulse against carrier to check if peak of pulse corresponds to peak of l0 (optimal friction).
-#Keep in mind we are discrete..
-#Could be nice to reduce omega accordingly whem more agents to impose fixed phase velocity. PROBLEM: good delta t depends on omega
-# We could show higher the number of agents--> higher velocity because we approah the continuum limit?
-
-
-#OBSERVATION and HOT QUESTIOMS:
-#1. In a multiagent setting and with a simple Q matrix linked to elongation/compression states there's no way of getting paper vel (?) 
-#  Could this be different in single agent? (if reward adequate to drive velocity maximization)
-#2. Can I distinguish crawling to grabbing by tuning reward on wall(prey) reach in a training scenario with prey close enough?
-
-
-# QUESTIONS:
-# In dynamics shall I pick an agent at random to evolve, or perform each time all actions for each sucker?
-# In a genuine multi agent what would be the choice? 
-# IMPORTANT DIFFERENCE:
-#    In a single agent framework I whoud choose an action at once which corresponds to do something on a single sucker..
-
 
 #PHYSICAL PARAMETERS
 #scaling --> keep zeta =1 and k same order of zeta, k = zeta
@@ -49,8 +19,6 @@ x0Fraction = 4
 reduced_m_inv = zeta/mass
 reduced_k = elastic_constant/zeta #overdsmped limit if k>>m but dt must be 
 dt = 0.1
-
-#NEW: ASSUME k and zeta same order both in overdamped and damped
 
 #------------
 
@@ -220,10 +188,7 @@ def build_tentacle(n_suckers,box,l0,x0,amplitude, exploringStarts = False):
     '''
     # Info on space from box objec
     A = []
-    offset_x = box.boundary[0]/(n_suckers+1) #box.boundary[0]/n_suckers
-    # print("offset= ",offset_x, box.boundary[0]-offset_x)
-    #fare in modo di avere None dove indice non esiste
-    # old_position = offset_x
+    offset_x = box.boundary[0]/(n_suckers+1) 
     old_position = box.boundary[0]-offset_x
     if exploringStarts:
         random.seed()#uses by default system time
@@ -381,11 +346,7 @@ class   Environment(object):
             # self._nagents = n_suckers
             self.get_state=self._get_state_multiagent
             print("**SUCKER AGENT**")
-            # self.action_space = 2 # sucker can turn on friction or turn it off
-            # self.state_space = 8#4
-            # self.action_space_name = {1:'anchoring', 0:'not anchoring'} # sucker can turn on friction or turn it off
             self.action_space= 2
-            # self.state_space_name = {(0,0):'->|<-',(0,1):'->|->',(1,0):'<-|<-',(1,1):'<-|->',('base',0):'base|<-',('base',1):'base|->' ,(0,'tip'):'->|tip',(1,'tip'):'<-|tip'}#4 internal + 2 tip + 2 base
             self.state_space = 8
         else:
             print("** CONTROL CENTER **")
@@ -400,9 +361,6 @@ class   Environment(object):
             self.get_state = self._get_state_controlCluster
             self.action_space = np.power(2,controlClusterSize)
             self.state_space = np.power(2,n_springs) # eg. ns =5 and 1 ganglion --> 4  springs --> 4 digit binary number to represent state
-            # self.action_space_name = {1:'anchoring', 0:'not anchoring'}
-            # self.state_space_name = {1:'elongated', 0:'compressed'}
-            # self._nagents = int((n_suckers - 1)/controlClusterSize)
             self._nGanglia = nGanglia
             
             print("\n**Control centers mode**\n")
@@ -530,10 +488,7 @@ class   Environment(object):
     def l0(self,t:float,k:int) -> float:
         '''
         N = number of suckers
-        '''
-        # the k dependent term mimics some time delay in the propagation 
-        # print (wavelengthFraction)
-        # print(x0,amplitude)
+        '''   
         return self.x0 + self.amplitude*math.sin(self.omega*t - 2*math.pi/self.N * (k+1))
     
     
@@ -579,18 +534,9 @@ class   Environment(object):
         #BASE
         states = []
         dright = -self._suckers[0]._abslutePosition +self._suckers[0].rightNeighbor._abslutePosition
-        # if dright<0:
-        #     # print('here state',dright)
-        #     dright +=  self._box.boundary
-            # print(dright)
         right_tension = sign0(dright-self.l0(self._t,0))
         states.append(state_space_name[('base',right_tension)])
 
-        #update old posiiton
-        # self._suckers[0]._position_old = self._suckers[0].position.copy()
-        # self._suckers[0]._abslutePosition_old = self._suckers[0]._abslutePosition.copy()
-        #Intermediate suckers
-        # for k in range(1,self._nsuckers-1):
         for sucker in self._suckers[1:self._nsuckers-1]:
             #more compact boundary enforcing
             k = sucker._id
@@ -606,9 +552,6 @@ class   Environment(object):
             left_tension = sign0(dleft-self.l0(self._t,k-1)) #negative argument = pushing right (compressed)
             states.append(state_space_name[(left_tension,right_tension)])
 
-            # #update old posiitons
-            # sucker._position_old = sucker.position.copy()
-            # sucker._abslutePosition_old = sucker._abslutePosition.copy()
 
         #TIP
         dleft = self._suckers[self._nsuckers-1]._abslutePosition - self._suckers[self._nsuckers-1].leftNeighbor._abslutePosition
@@ -617,63 +560,7 @@ class   Environment(object):
         left_tension = sign0(dleft-self.l0(self._t,self._nsuckers-2))
         states.append(state_space_name[(left_tension,'tip')])
 
-        #update old posiiton
-        # self._suckers[self._nsuckers-1]._position_old=self._suckers[self._nsuckers-1].position.copy()
-        # self._suckers[self._nsuckers-1]._abslutePosition_old = self._suckers[self._nsuckers-1]._abslutePosition.copy()
-
-
-        # if multiagent:
-            # if not humanR:
         return states
-            # else:
-            #     return [ ( "elongated" if s[0]==1 else "compressed" , "elongated" if s[1] ==1 else "compressed") for s in states]
-        # else:
-        #     S =[]
-        #     #CHECK/THINK MORE
-        #     # [s_agent_i sagent_j ] S = 2^nagents :  S = s[agent][left_tension/right_tension]s[diffagent][left/right]
-        #     for i in range(self._nagents):
-        #         for j in  range(i+1,self._nagents):
-        #             i_rev= self._nagents - (i+1)
-        #             j_rev = self._nagents -(j+1)
-        #             (states[i_rev][0]*states[j_rev][0])+S
-        #             S.append(states[i][1]*states[j][1])
-        #     return S
-        
-    # def get_humandR_state(self):
-    #     state = self.get_state()
-    #     return [ ( "elongated" if s[0]==1 else "compressed" if s[0]==0 else "base" , "elongated" if s[1] ==1 else "compressed" if s[1]==0 else "tip") for s in state]
-
-    # def get_stateDebug(self):
-    #     #BASE
-    #     states = []
-    #     dright = -self._agents[0].position +self._agents[0].rightNeighbor.position
-    #     right_tension = dright-self.l0(self._t,0)
-    #     states.append((2,right_tension))
-
-
-    #     #Intermediate suckers
-    #     # for k in range(1,self._nsuckers-1):
-    #     for sucker in self._agents[1:self._nsuckers-1]:
-    #         #more compact boundary enforcing
-    #         k = sucker._id
-    #         pright = sucker.rightNeighbor.position
-    #         pleft = sucker.leftNeighbor.position
-    #         dright = -sucker.position + pright
-    #         if dright<0:
-    #             dright +=  self._box.boundary
-    #         right_tension = dright-self.l0(self._t,k)  #negative argument = pushing left (compressed)
-    #         dleft = sucker.position - pleft
-    #         if dleft<0:
-    #             dleft += self._box.boundary
-    #         left_tension = dleft-self.l0(self._t,k-1) #negative argument = pushing right (compressed)
-    #         states.append((left_tension,right_tension))
-
-    #     #TIP
-    #     dleft = self._agents[self._nsuckers-1].position - self._agents[self._nsuckers-1].leftNeighbor.position
-    #     left_tension = dleft-self.l0(self._t,self._nsuckers-1-1)
-    #     states.append((left_tension,2))
-
-    #     return states
 
     def get_tip(self):
         return self._suckers[-1].position[0]
@@ -708,7 +595,7 @@ class   Environment(object):
 
 
     def _get_acceleration(self,sucker):
-        #.position is the current position
+        #position is the current position
         #TODO remove try except which constitute additional if, but trerat explicirtly base and tip
 
         k = sucker._id
@@ -738,12 +625,13 @@ class   Environment(object):
         '''
         Computes reward and checks terminal condition 
         '''
+        #OTHER POSSIBLE REWARDS 
         #velocity = 0.5/dt*(self._CM_position[-1] - self._CM_position[-2])#need several orders to be distinguishible from advancement
         # velocity2 = 1./6(self._CM_position[-1] + self._CM_position[-2] -self._CM_position[-3] - self._CM_position[-4])
         # velocityn = sum(self._CM_position[-int(len(self._CM_position)/2):]) - sum(self._CM_position[:int(len(self._CM_position)/2)])
 
 
-        #TERMINAL CONDITION
+        #TERMINAL CONDITION: USED ONLY IF THE WALL IS PLACED WITHIN THE SIMULATION BOX --> NOT IMPLEMENTED
         terminal = False 
         touching = [(abs(a.position - self._tposition[0])<= minDistance)[0] for a in self._suckers]
 
@@ -767,7 +655,7 @@ class   Environment(object):
         else:
             reward = -1
         
-        # if touching[-1]:
+        # if touching[-1]: TERMINAL CONDITION --> NOT IMPLEMENTED
         #     print(touching)
         #     terminal = True
             # reward = 0
@@ -787,19 +675,16 @@ class   Environment(object):
         IMPORTANT: old position update upon call to get state function <--
         '''
 
-        #TODO treat explicitly base and tip for efficiency
-
-        #raise NameError ("Non overdamped dynamics is not implemented ")
         for sucker in self._suckers: 
             k = sucker._id
             # print(k,action[k])
             sucker.lastAction = action[k]
-            # print(sucker._velocity_old,sucker._acceleration_old)
+            
             if action[k] ==1:
                 sucker._velocity_old =0
                 sucker._acceleration_old =0
                 continue
-                #self._agents[k].position = self._agents[k]._position_old
+                
             else:
                 acceleration = self._get_acceleration(sucker) #acceleration on old positions
                 sucker._acceleration_old = acceleration
@@ -833,7 +718,7 @@ class   Environment(object):
 
         return  newState,reward,terminal 
 
-    #better to do the decoding on the side of learning
+    
     def _step_ganglia(self,action):
         '''
         Needs to flatten all actions per ganlia in single list to pass to usual method
@@ -841,29 +726,19 @@ class   Environment(object):
         However some thought is needed, since the loop there skips some suckers..
         '''
         action_flattened = [a for al in action for a in al]
-        # print(action_flattened)
         return_value = self._stepOverdamped(action_flattened)
 
-        #update old positions
-        # for sucker in self._suckers:
-        #     sucker._position_old = sucker.position.copy()
-        #     sucker._abslutePosition_old = sucker._abslutePosition.copy()
+       
         
      
         return return_value
-
-        #Working in progress.. here the difficulty is to include scenarios with several control centers  = clustered multiagent 
+  
         
     def _stepOverdampedVIRTUAL(self,action):
         '''
         Same as below excluding update of old positions and observables.
         Sufficient to consider absolute positions for the purpose.
         '''
-        
-        # #GET ALL CURRENT POSITIONS
-        # positions =[]
-        # for sucker in self._suckers:
-        #     position.append() 
         
         if action[0] == 0:
             pright = self._suckers[0].rightNeighbor._abslutePosition_old
@@ -1011,10 +886,6 @@ class   Environment(object):
             print("initializing matplotlib plot")
             self._figTip = plt.subplot(xlabel='time steps', ylabel='tip position') #fig,ax
             
-            
-        
-        # for l in self._currentPlotTip:
-        #     l.remove()
         
         self._figTip.set_title(label='Tip position, episode '+str(self._episode))
         self._currentPlotTip = self._figTip.plot(self._telapsed,self._tip_positions,linewidth=2)
@@ -1218,16 +1089,6 @@ class   Environment(object):
         # We need to ensure that human-rendering occurs at the predefined framerate.
         # The following line will automatically add a delay to keep the framerate stable.
         self.clock.tick(self.metadata["render_fps"])
-    #         else:  # rgb_array
-    #             return np.transpose(
-    #                 np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
-    #             )
-
-    # def get_optimalAction(self):
-    #     #OBS: still dependency on binning. I have to pick closer bin
-    #     self.l0(self._t,k)
-    # def optimalStep(self):
-    #     action = get_optimalAction()
 
 
 

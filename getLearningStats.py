@@ -13,8 +13,6 @@ import numpy as np
 import time
 from datetime import datetime
 from datetime import timedelta
-from tqdm import tqdm
-from tqdm import trange
 
 readPeriod = False
 
@@ -150,8 +148,6 @@ explore_plateau = True
 # n_suckers = int(input("insert number of suckers\n"))
 n_suckers = inputParam.ns
 
-# answ = int(input("insert 1 for multiagent, 0 for control center\n"))
-# answ2 = int(input("Insert 1 for HIVE UPDATE, 0 otherwise\n"))
 
 #default Parameters:
 sim_shape = inputParam.sim_shape
@@ -172,6 +168,9 @@ lrPlateau = inputParam.lr_plateau
 epsPlateau = inputParam.epsilon_plateau
 n_episodesPlateau = inputParam.polExplEpisodes
 isHive = inputParam.isHive
+
+
+# In the following the initial steps per episode are fixed 
 
 if not is_Ganglia:
     print("Each sucker is an agent")
@@ -197,12 +196,6 @@ else:
         # isHive = False
         typename = "%dGANGLIA"%nGanglia
 
-
-# answ= input("Plateau expoloration? ")
-# if answ:
-
-# else:
-#     explore_plateau = False
 
 #######################
 ##################
@@ -281,10 +274,7 @@ else:
 
 #if is_Ganglia or isHive:
 saveData(Q,typename,outFolder=outFolderFigures)
-   # for n in numberOfTrainings..
-#here other runs just to get stats on sub otpimal policies by exporing a bit in the plateau region
 
-    #not saving for multiagent.. too many..
 info = {'lr':lrPlateau,'eps':epsPlateau,'steps':default_steps,'convergence':plateau_conv}
 print("analysis of last # policies..")
 bestPolIndx = getPolicyStats(Q,env,info = info,runtimeInfo=RuntimeInfo,outFolder = outFolderRawData,nLastPolicies = n_episodesPlateau+1)
@@ -297,14 +287,3 @@ filename = "actionTimeSeriesOnPolicy_"+typename+".npy"
 np.save(filename,A)
 filename = "bestPolicy_"+typename+".npy"
 np.save(filename,Q._refPolicy)
-#Now some filtering of best policies to extract for instance action time series and characterize it. In any case interesting to save at least the best policy and relative A matrix
-
-#TODO : 1. create figures and raw folders autonomously if they dont't exist!!
-#       2. save Q matrix best policy
-
-
-
-
-# DOMANDE AGNESE:
-# 1. numero policies da considerare per average, uguale a quanto esploro plateau?
-# 2. Per multiagent hive sembra probleamatico lr grande..
