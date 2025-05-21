@@ -438,7 +438,7 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
             else:
                 max_failingSuckers = 2#env._nsuckers+1 #all suckers
             for fs in range(max_failingSuckers):
-                vel = robustnessAnal(env,policy,isHive,epsilon,failingSuckers=fs,epsilonGreedyFail=False,randomSuckerSel = randomSuckerSel,whichDevils = ranked_averaged_devils)
+                vel = robustnessAnalysis(env,policy,isHive,epsilon,failingSuckers=fs,epsilonGreedyFail=False,randomSuckerSel = randomSuckerSel,whichDevils = ranked_averaged_devils)
                 vels.append(vel)
                 failing_suckers.append(fs)
             
@@ -447,7 +447,7 @@ def policyRobustnessStudy(policies,suckerCentric=True,plot=True,normalize=True,r
         else:
             epsilons = np.linspace(0,1,10,endpoint=False)
             for epsilon in epsilons:
-                vel = robustnessAnal(env,policy,isHive,epsilon,epsilonGreedyFail=True)
+                vel = robustnessAnalysis(env,policy,isHive,epsilon,epsilonGreedyFail=True)
                 vels.append(vel)
             out = [epsilons,vels]
         if normalize:
@@ -623,7 +623,7 @@ def getAction(info,policy,state,isHive,epsilon=None):
     
 
 
-def robustnessAnal(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=False,doMovie = False, steps = 20000, randomSuckerSel = True,whichDevils = None):
+def robustnessAnalysis(env,policy,isHive,epsilon,failingSuckers=0,epsilonGreedyFail=False,doMovie = False, steps = 20000, randomSuckerSel = True,whichDevils = None):
     '''
     Returns a plot/data on decay of velocity as a function of the #suckers failing when playing the given policy.
     Usage: loop externally to extract correspondent velocity. 
