@@ -1,0 +1,34 @@
+######### INPOUT FILE FOR GATHERING LEARNING STATS ###################
+
+
+#IMPORTANT NOTE:
+# Wavelength fixed to tentacle length. x0 changes accordingly
+# Simulation box parameters hard coded
+
+#TENTACLE PARAMETERS (if omitted error message)
+omega = 0.1
+t_length = 10
+n_suckers = 12
+
+#LEARNING PARAMETERS:
+
+# 1. Architecture (if omitted error message)
+Control Center = True
+n ganglia = 1
+IS HIVE = False
+
+#2 Training (if omitted/commented default are picked)
+min_lr = 0.001
+min_epsilon = 0.001
+Plateau Exploration min_lr = 0.2
+Plateau Exploration min_epsilon = 0.1
+
+schedulingEpisodes = 1000  #if different from default, WARNING 
+max episodes = 1500
+#steps decided internally..
+
+#early stopping = True
+#policy exploration = True
+
+policy exploration episodes = 500
+convergence = 0.005 #default 0.01
