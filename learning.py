@@ -1094,14 +1094,10 @@ class actionValue(object):
             
             if self._parallelUpdate:
                 out_state = encoded_state
-                # encoded_state = [stateIndexMap[s] for s in state]
                 for k in range(self._nsuckers):
-                    # print(encoded_state[k])
                     out_action.append(self._refPolicy[encoded_state[k]])
             else:
                 out_state = [(agent,state) for agent,state in enumerate(state)]
-                # encoded_state_multi = [stateIndexMap_multi[s] for s in state]
-                # encoded_state = [stateIndexMap[s] for s in state]
                 for k in range(self._nAgents):
                     out_action.append(self._refPolicy[k][encoded_state[k]])
             
@@ -1172,6 +1168,7 @@ class actionValue(object):
         Set by hand the default policy
         '''
         self._refPolicy = policy
+        
 
     def test(self,env,policy,steps = 10000,doMovie=True):
         from tqdm import trange
@@ -1181,6 +1178,8 @@ class actionValue(object):
         action_space_dim = learning_space[1]
         nsuckers = env.info["n suckers"]
         isGanglia = env.info["isGanglia"]
+        self.loadPolicy(policy)
+
         if self.state_space_dim != state_space_dim:
             print("Not expected environment. Exit")
             return
@@ -1202,12 +1201,19 @@ class actionValue(object):
         if self._parallelUpdate != isHive:
             print("loaded policy not consistent with initialization (hive/not hive)")
             return
+        else:
+            self._refPolicy=self._refPolicy[()]
 
-        self.loadPolicy(policy)
+        
+        print("Ganglia = ",isGanglia)
+        print("number of suckers = ", nsuckers)
+        if isGanglia==False:
+            print(self._refPolicy)
         
         env.reset(equilibrate = True)
         state = env.get_state()
         cumulativeR = 0
+        
         for s in trange(steps):
             action = self.getOnPolicyAction(state)
             state,r,_t = env.step(action)
